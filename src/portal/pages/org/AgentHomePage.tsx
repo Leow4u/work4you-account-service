@@ -20,10 +20,6 @@ export function AgentHomePage() {
   const [sessions, setSessions] = useState<OAuthLoginSession[]>([])
   const [loading, setLoading] = useState(true)
   const [revoking, setRevoking] = useState<string | null>(null)
-  const [cliBillingEnabled, setCliBillingEnabled] = useState(true)
-  const [canChangePlan, setCanChangePlan] = useState(false)
-  const [toggling, setToggling] = useState(false)
-  const [flash, setFlash] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!authenticated) {
@@ -38,23 +34,15 @@ export function AgentHomePage() {
         setSessions([])
         return
       }
-      const headers = { Authorization: `Bearer ${token}` }
-      const [sRes, bRes] = await Promise.all([
-        fetch('/api/oauth/sessions', { headers }),
-        fetch('/api/billing/state', { headers }),
-      ])
-      if (sRes.ok) {
-        const data = (await sRes.json()) as { sessions?: OAuthLoginSession[] }
-        setSessions(Array.isArray(data.sessions) ? data.sessions : [])
-      } else setSessions([])
-      if (bRes.ok) {
-        const billing = (await bRes.json()) as {
-          cliBillingEnabled?: boolean
-          canChangePlan?: boolean
-        }
-        setCliBillingEnabled(Boolean(billing.cliBillingEnabled))
-        setCanChangePlan(Boolean(billing.canChangePlan))
+      const res = await fetch('/api/oauth/sessions', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        setSessions([])
+        return
       }
+      const data = (await res.json()) as { sessions?: OAuthLoginSession[] }
+      setSessions(Array.isArray(data.sessions) ? data.sessions : [])
     } catch {
       setSessions([])
     } finally {
@@ -84,37 +72,6 @@ export function AgentHomePage() {
     }
   }
 
-  async function toggleRemoteSpending() {
-    setToggling(true)
-    setFlash(null)
-    try {
-      const token = await getAccessToken()
-      if (!token) return
-      const next = !cliBillingEnabled
-      const res = await fetch('/api/billing/remote-spending', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ enabled: next }),
-      })
-      const data = (await res.json()) as {
-        cliBillingEnabled?: boolean
-        message?: string
-        error?: string
-      }
-      if (!res.ok) {
-        setFlash(data.error || 'Falha ao atualizar')
-        return
-      }
-      setCliBillingEnabled(Boolean(data.cliBillingEnabled))
-      setFlash(data.message || null)
-    } finally {
-      setToggling(false)
-    }
-  }
-
   return (
     <div className={styles.wrap}>
       <OrgPage eyebrow="Work4You Agent" title="Work4You Agent">
@@ -128,36 +85,6 @@ export function AgentHomePage() {
             Visitar Work4You Agent →
           </a>
         </div>
-
-        {flash ? <p className={styles.flash}>{flash}</p> : null}
-
-        <section className={pageStyles.panel} aria-labelledby="remote-heading">
-          <h2 id="remote-heading" className={styles.sessionsTitle}>
-            Gasto remoto (Remote Spending)
-          </h2>
-          <p className={styles.remoteCopy}>
-            Quando ligado, terminais com scope <code>billing:manage</code> podem
-            cobrar o cartão (top-up / upgrade). O fork trata o desligar como{' '}
-            <code>cli_billing_disabled</code>.
-          </p>
-          <div className={styles.remoteRow}>
-            <span className={styles.spendBadge}>
-              {cliBillingEnabled ? 'Ligado' : 'Desligado'}
-            </span>
-            <button
-              type="button"
-              className={styles.signOut}
-              disabled={!canChangePlan || toggling || loading}
-              onClick={() => void toggleRemoteSpending()}
-            >
-              {toggling
-                ? '…'
-                : cliBillingEnabled
-                  ? 'Desligar Remote Spending'
-                  : 'Ligar Remote Spending'}
-            </button>
-          </div>
-        </section>
 
         <section className={pageStyles.panel} aria-labelledby="sessions-heading">
           <h2 id="sessions-heading" className={styles.sessionsTitle}>
