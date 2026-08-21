@@ -51,6 +51,31 @@ export function getTier(id: string): TierDef {
   return TIER_CATALOG.find((t) => t.tierId === id) || TIER_CATALOG[0]
 }
 
+export function isPaidTierId(id: string): id is Exclude<TierId, 'free'> {
+  return id === 'plus' || id === 'super' || id === 'ultra'
+}
+
+/** Resolve Stripe Price id for a paid tier (env-backed). */
+export function stripePriceId(tierId: string): string {
+  const tier = getTier(tierId)
+  if (!tier.envPriceKey) {
+    throw new Error(`tier_${tierId}_has_no_stripe_price`)
+  }
+  const id = process.env[tier.envPriceKey]?.trim()
+  if (!id) {
+    throw new Error(`${tier.envPriceKey} is not set`)
+  }
+  return id
+}
+
+export function tierIdFromPriceId(priceId: string): TierId | null {
+  for (const t of TIER_CATALOG) {
+    if (!t.envPriceKey) continue
+    if (process.env[t.envPriceKey]?.trim() === priceId) return t.tierId
+  }
+  return null
+}
+
 /** Decimal-string add (2dp). */
 export function moneyAdd(a: string, b: string): string {
   return (Number(a || 0) + Number(b || 0)).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')

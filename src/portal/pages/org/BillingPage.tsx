@@ -18,6 +18,8 @@ export function BillingPage() {
   const topupOpen = searchParams.get('topup') === 'open'
   const manageOpen = searchParams.get('manage') === '1'
   const cardSaved = searchParams.get('card') === 'saved'
+  const planUpgraded = searchParams.get('plan') === 'upgraded'
+  const preselectPlan = searchParams.get('plan')
 
   const [billing, setBilling] = useState<BillingStatePayload | null>(null)
   const [subscription, setSubscription] =
@@ -79,11 +81,126 @@ export function BillingPage() {
     }
   }, [cardSaved, load, searchParams, setSearchParams])
 
+  useEffect(() => {
+    if (planUpgraded) {
+      setFlash('Plano atualizado')
+      const next = new URLSearchParams(searchParams)
+      next.delete('plan')
+      setSearchParams(next, { replace: true })
+      void load()
+    }
+  }, [planUpgraded, load, searchParams, setSearchParams])
+
   function setQuery(key: string, value: string | null) {
     const next = new URLSearchParams(searchParams)
     if (value == null) next.delete(key)
     else next.set(key, value)
     setSearchParams(next, { replace: true })
+  }
+
+  useEffect(() => {
+    if (preselectPlan && preselectPlan !== 'upgraded' && !manageOpen) {
+      setQuery('manage', '1')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectPlan])
+
+  async function upgradeTier(tierId: string) {
+    setBusy(`upgrade:${tierId}`)
+    setFlash(null)
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const hasPaid = Boolean(subscription?.current)
+      if (!hasPaid) {
+        const res = await fetch('/api/billing/subscription/checkout', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscriptionTypeId: tierId,
+            returnPath: `/orgs/${billing?.org.slug}/billing?plan=upgraded`,
+          }),
+        })
+        const data = (await res.json()) as { url?: string; error?: string; message?: string }
+        if (data.url) {
+          window.location.href = data.url
+          return
+        }
+        setFlash(data.message || data.error || 'Falha no Checkout')
+        return
+      }
+      const key = crypto.randomUUID()
+      const res = await fetch('/api/billing/subscription/upgrade', {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': key,
+        },
+        body: JSON.stringify({ subscriptionTypeId: tierId }),
+      })
+      const data = (await res.json()) as {
+        status?: string
+        targetTierName?: string
+        reason?: string
+        error?: string
+        message?: string
+      }
+      if (data.status === 'upgraded' || data.status === 'already_on_tier') {
+        setFlash(
+          data.status === 'already_on_tier'
+            ? `Já estás no ${data.targetTierName}`
+            : `Upgrade para ${data.targetTierName} concluído`,
+        )
+        await load()
+        return
+      }
+      if (data.status === 'requires_action') {
+        const cRes = await fetch('/api/billing/subscription/checkout', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscriptionTypeId: tierId }),
+        })
+        const cData = (await cRes.json()) as { url?: string; error?: string }
+        if (cData.url) {
+          window.location.href = cData.url
+          return
+        }
+      }
+      setFlash(data.message || data.error || data.reason || 'Upgrade falhou')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function scheduleDowngrade(tierId: string) {
+    setBusy(`down:${tierId}`)
+    setFlash(null)
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const res = await fetch('/api/billing/subscription/pending-change', {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'tier_change',
+          subscriptionTypeId: tierId,
+        }),
+      })
+      const data = (await res.json()) as {
+        message?: string
+        error?: string
+        targetTierName?: string
+      }
+      if (!res.ok) {
+        setFlash(data.message || data.error || 'Não foi possível agendar')
+        return
+      }
+      setFlash(data.message || `Mudança para ${data.targetTierName} agendada`)
+      await load()
+    } finally {
+      setBusy(null)
+    }
   }
 
   async function addCard() {
@@ -253,7 +370,7 @@ export function BillingPage() {
                 <strong>Créditos da subscrição</strong>
                 <span className={styles.rowMeta}>
                   {formatUsdDisplay(
-                    subscription?.current.monthlyCredits ||
+                    subscription?.current?.monthlyCredits ||
                       billing?.subscriptionCreditsUsd ||
                       '0',
                   )}{' '}
@@ -325,17 +442,17 @@ export function BillingPage() {
             <div className={styles.planRow}>
               <div>
                 <p className={styles.planName}>
-                  {subscription?.current.tierName || billing?.planName || 'Free'}
+                  {subscription?.current?.tierName || billing?.planName || 'Free'}
                 </p>
                 <p className={styles.rowMeta}>
                   {formatUsdDisplay(
                     subscription?.tiers.find((t) => t.isCurrent)
-                      ?.dollarsPerMonthDisplay ||
-                      (billing?.subscriptionTierId === 'free' ? '0' : '0'),
+                      ?.dollarsPerMonthDisplay || '0',
                   )}
                   /mês ·{' '}
                   {formatUsdDisplay(
-                    subscription?.current.monthlyCredits || '0.10',
+                    subscription?.current?.monthlyCredits ||
+                      (billing?.subscriptionTierId === 'free' ? '0.10' : '0'),
                   )}{' '}
                   créditos
                 </p>
@@ -451,32 +568,48 @@ export function BillingPage() {
                 : ''}
             </p>
             <ul className={styles.tierList}>
-              {subscription.tiers.map((t) => (
-                <li key={t.tierId}>
-                  <div>
-                    <strong>
-                      {t.name} ({formatUsdDisplay(t.dollarsPerMonthDisplay)}/mês)
-                    </strong>
-                    <span className={styles.bonus}>
-                      {formatUsdDisplay(t.monthlyCredits)} créditos mensais
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className={styles.primary}
-                    disabled={t.isCurrent || !billing?.card}
-                    onClick={() =>
-                      setFlash(
-                        !billing?.card
-                          ? 'Adiciona um cartão primeiro'
-                          : 'Upgrade com Checkout em breve',
-                      )
-                    }
-                  >
-                    {t.isCurrent ? 'Atual' : 'Upgrade'}
-                  </button>
-                </li>
-              ))}
+              {subscription.tiers.map((t) => {
+                const currentOrder =
+                  subscription.tiers.find((x) => x.isCurrent)?.tierOrder ?? 0
+                const isDowngrade =
+                  Boolean(subscription.current) && t.tierOrder < currentOrder
+                return (
+                  <li key={t.tierId}>
+                    <div>
+                      <strong>
+                        {t.name} ({formatUsdDisplay(t.dollarsPerMonthDisplay)}/mês)
+                      </strong>
+                      <span className={styles.bonus}>
+                        {formatUsdDisplay(t.monthlyCredits)} créditos mensais
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.primary}
+                      disabled={
+                        t.isCurrent ||
+                        Boolean(busy) ||
+                        !billing?.canChangePlan
+                      }
+                      onClick={() => {
+                        if (isDowngrade) {
+                          void scheduleDowngrade(t.tierId)
+                          return
+                        }
+                        void upgradeTier(t.tierId)
+                      }}
+                    >
+                      {busy === `upgrade:${t.tierId}` || busy === `down:${t.tierId}`
+                        ? '…'
+                        : t.isCurrent
+                          ? 'Atual'
+                          : isDowngrade
+                            ? 'Agendar'
+                            : 'Upgrade'}
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           </section>
         ) : null}

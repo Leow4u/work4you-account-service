@@ -47,6 +47,11 @@ model Org {
   stripeSubscriptionId String?
   cardBrand           String?
   cardLast4           String?
+  /// Scheduled downgrade (chargeless; applied at period end via Stripe schedule / webhook).
+  pendingDowngradeTierId   String?
+  pendingDowngradeTierName String?
+  pendingDowngradeAt        DateTime?
+  cancelAtPeriodEnd         Boolean   @default(false)
   autoReloadEnabled   Boolean @default(false)
   autoReloadThresholdUsd String?
   autoReloadAmountUsd    String?

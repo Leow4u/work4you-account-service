@@ -7,6 +7,7 @@ import { RequirePersonalOrg } from './components/RequireAuth'
 import { personalOrgId } from './lib/org'
 import { DeviceApprovePage } from './pages/DeviceApprovePage'
 import { LoginPage } from './pages/LoginPage'
+import { ManageSubscriptionPage } from './pages/ManageSubscriptionPage'
 import { AccountSettingsPage } from './pages/org/AccountSettingsPage'
 import { AgentHomePage } from './pages/org/AgentHomePage'
 import { ApiKeysPage } from './pages/org/ApiKeysPage'
@@ -50,6 +51,7 @@ export default function PortalApp() {
       <Route path="/signup" element={<LoginPage initialMode="signup" />} />
       <Route path="/device" element={<DeviceApprovePage />} />
       <Route path="/billing" element={<BillingDeepLink />} />
+      <Route path="/manage-subscription" element={<ManageSubscriptionPage />} />
 
       <Route
         path="/orgs/:orgId"

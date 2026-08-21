@@ -2,6 +2,7 @@ import type { Actor } from './auth'
 import { canChangePlan } from './auth'
 import type { BillingStatePayload } from './billing-client'
 import { getTier, totalSpendable, TIER_CATALOG } from './tiers'
+import { portalBaseUrl } from './stripe'
 
 export type { BillingStatePayload } from './billing-client'
 export { formatUsdDisplay } from './billing-client'
@@ -74,23 +75,42 @@ export function buildBillingState(actor: Actor): BillingStatePayload {
   }
 }
 
+/**
+ * GET /api/billing/subscription — fork wire shape.
+ * Free plan ⇒ ``current: null`` (not a Free object).
+ * ``org`` is nested ``{ id, name, role }``.
+ */
 export function buildSubscriptionState(actor: Actor) {
   const { org, role } = actor
   const tierId = (org.subscriptionTierId || 'free') as string
   const currentTier = getTier(tierId)
-  const current = {
-    tierId: currentTier.tierId,
-    tierName: org.subscriptionTierName || currentTier.name,
-    monthlyCredits: currentTier.monthlyCredits,
-    creditsRemaining: org.subscriptionCreditsUsd || '0',
-    cycleEndsAt: org.cycleEndsAt?.toISOString() ?? null,
-    pendingDowngradeTierName: null as string | null,
-    pendingDowngradeAt: null as string | null,
-    cancelAtPeriodEnd: false,
-    cancellationEffectiveAt: null as string | null,
-  }
+  const isFree = tierId === 'free'
+
+  const current = isFree
+    ? null
+    : {
+        tierId: currentTier.tierId,
+        tierName: org.subscriptionTierName || currentTier.name,
+        monthlyCredits: currentTier.monthlyCredits,
+        creditsRemaining: org.subscriptionCreditsUsd || '0',
+        cycleEndsAt: org.cycleEndsAt?.toISOString() ?? null,
+        pendingDowngradeTierName: org.pendingDowngradeTierName ?? null,
+        pendingDowngradeAt: org.pendingDowngradeAt?.toISOString() ?? null,
+        cancelAtPeriodEnd: Boolean(org.cancelAtPeriodEnd),
+        cancellationEffectiveAt: org.cancelAtPeriodEnd
+          ? (org.pendingDowngradeAt ?? org.cycleEndsAt)?.toISOString() ?? null
+          : null,
+      }
+
+  const base = portalBaseUrl()
 
   return {
+    org: {
+      id: org.id,
+      name: org.name,
+      role,
+    },
+    // Flat aliases kept for the Portal SPA (pre-fork nesting).
     orgName: org.name,
     orgId: org.id,
     role,
@@ -103,9 +123,9 @@ export function buildSubscriptionState(actor: Actor) {
       tierOrder: t.tierOrder,
       dollarsPerMonthDisplay: t.dollarsPerMonth,
       monthlyCredits: t.monthlyCredits,
-      isCurrent: t.tierId === tierId,
+      isCurrent: !isFree && t.tierId === tierId,
       isEnabled: true,
     })),
-    portalUrl: `/orgs/${encodeURIComponent(org.slug)}/billing`,
+    portalUrl: `${base}/orgs/${encodeURIComponent(org.slug)}/billing`,
   }
 }

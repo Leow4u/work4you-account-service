@@ -36,23 +36,27 @@ export type BillingStatePayload = {
   portalUrl: string
 }
 
+export type SubscriptionCurrent = {
+  tierId: string
+  tierName: string
+  monthlyCredits: string
+  creditsRemaining: string
+  cycleEndsAt: string | null
+  pendingDowngradeTierName: string | null
+  pendingDowngradeAt: string | null
+  cancelAtPeriodEnd: boolean
+  cancellationEffectiveAt: string | null
+}
+
 export type SubscriptionStatePayload = {
+  org: { id: string; name: string; role: string }
   orgName: string
   orgId: string
   role: string
   canChangePlan: boolean
   context: string
-  current: {
-    tierId: string
-    tierName: string
-    monthlyCredits: string
-    creditsRemaining: string
-    cycleEndsAt: string | null
-    pendingDowngradeTierName: string | null
-    pendingDowngradeAt: string | null
-    cancelAtPeriodEnd: boolean
-    cancellationEffectiveAt: string | null
-  }
+  /** null = Free (no paid plan). */
+  current: SubscriptionCurrent | null
   tiers: Array<{
     tierId: string
     name: string
