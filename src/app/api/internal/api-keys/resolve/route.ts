@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/db'
 import { resolveApiKeySecret } from '@/lib/api-keys'
+import { getTier } from '@/lib/tiers'
+import { orgHasPaidPlan } from '@/lib/model-access'
+import { buildPaidServiceAccess } from '@/lib/account-entitlement'
 
 export const runtime = 'nodejs'
 
@@ -33,10 +37,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_api_key' }, { status: 401 })
   }
 
+  const org = await prisma.org.findUnique({ where: { id: resolved.orgId } })
+  if (!org) {
+    return NextResponse.json({ error: 'invalid_api_key' }, { status: 401 })
+  }
+  const tier = getTier(org.subscriptionTierId || 'free')
+  const access = buildPaidServiceAccess(org)
+
   return NextResponse.json({
     keyId: resolved.keyId,
     orgId: resolved.orgId,
     name: resolved.name,
     scope: 'inference:invoke',
+    paid_plan: orgHasPaidPlan(org),
+    subscription_tier: tier.tierOrder,
+    tier_id: tier.tierId,
+    paid_access: access.allowed,
   })
 }
