@@ -30,6 +30,7 @@ model Org {
   deviceCodes DeviceCode[]
   charges   BillingCharge[]
   debits    BillingDebit[]
+  apiKeys   ApiKey[]
 
   /// Top-up / purchased credit balance (decimal STRING, never float).
   balanceUsd String @default("0")
@@ -120,6 +121,25 @@ model OAuthSession {
 
   @@index([orgId, revokedAt])
   @@index([userId, revokedAt])
+}
+
+/// Static Portal inference keys (`sk-work4you-…`). Secret stored as SHA-256 only.
+model ApiKey {
+  id             String    @id @default(cuid())
+  orgId          String
+  org            Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name           String    @default("Chave de API")
+  /// SHA-256 hex of the full secret.
+  keyHash        String    @unique
+  /// Display prefix e.g. sk-work4you-Ab12…x9Qz
+  keyPrefix      String
+  totalSpentUsd  String    @default("0")
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([orgId, revokedAt])
 }
 
 /// One top-up charge (CLI poll contract).

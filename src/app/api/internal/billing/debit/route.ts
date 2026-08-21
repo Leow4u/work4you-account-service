@@ -38,10 +38,12 @@ export async function POST(req: NextRequest) {
     amountUsd?: number | string
     idempotencyKey?: string
     purpose?: string
+    apiKeyId?: string
   }
 
   const orgId = body.orgId?.trim()
   const idempotencyKey = body.idempotencyKey?.trim()
+  const apiKeyId = body.apiKeyId?.trim() || null
   const amount = Number(body.amountUsd)
   if (!orgId || !idempotencyKey || !Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
@@ -74,6 +76,14 @@ export async function POST(req: NextRequest) {
         },
         { status: 402 },
       )
+    }
+
+    if (apiKeyId && result.status === 'settled') {
+      const { recordApiKeySpend } = await import('@/lib/api-keys')
+      await recordApiKeySpend({
+        keyId: apiKeyId,
+        amountUsd: result.amountUsd,
+      })
     }
 
     return NextResponse.json(result)
