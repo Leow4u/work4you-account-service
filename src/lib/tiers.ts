@@ -47,6 +47,14 @@ export const TIER_CATALOG: TierDef[] = [
   },
 ]
 
+/** Hermes-mirrored per-plan rate limits (Portal inference authorize). */
+export const TIER_RATE_LIMITS: Record<string, { rpm: number; tpm: number }> = {
+  free: { rpm: 50, tpm: 500_000 },
+  plus: { rpm: 400, tpm: 4_000_000 },
+  super: { rpm: 800, tpm: 8_000_000 },
+  ultra: { rpm: 1_600, tpm: 16_000_000 },
+}
+
 export function getTier(id: string): TierDef {
   return TIER_CATALOG.find((t) => t.tierId === id) || TIER_CATALOG[0]
 }

@@ -1,21 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { buildPaidServiceAccess, orgHasUsableCredits } from '@/lib/account-entitlement'
-import { getTier } from '@/lib/tiers'
+import { getTier, TIER_RATE_LIMITS } from '@/lib/tiers'
 import { orgHasPaidPlan } from '@/lib/model-access'
 
 export const runtime = 'nodejs'
-
-/** Hermes-mirrored per-plan rate limits (Portal inference). */
-export const TIER_RATE_LIMITS: Record<
-  string,
-  { rpm: number; tpm: number }
-> = {
-  free: { rpm: 50, tpm: 500_000 },
-  plus: { rpm: 400, tpm: 4_000_000 },
-  super: { rpm: 800, tpm: 8_000_000 },
-  ultra: { rpm: 1_600, tpm: 16_000_000 },
-}
 
 function assertInferenceAuth(req: NextRequest): boolean {
   const secret = process.env.INFERENCE_BILLING_SECRET?.trim()
