@@ -1,0 +1,222 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--papel);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--linha);
+}
+
+.brand img {
+  height: 1.05rem;
+  width: auto;
+}
+
+.homeLink {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--grafite);
+}
+
+.homeLink:hover {
+  color: var(--oliva);
+}
+
+.main {
+  display: grid;
+  place-items: center;
+  padding: 2.5rem 1.25rem 3rem;
+}
+
+.card {
+  width: min(100%, 420px);
+  background: #fafaf6;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  padding: 2rem 1.75rem 1.75rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.65rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--oliva);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.15rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--tinta);
+}
+
+.status {
+  margin: 0.85rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--grafite);
+}
+
+.status strong {
+  color: var(--tinta);
+  font-weight: 700;
+}
+
+.provider:disabled,
+.emailToggle:disabled,
+.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.providers {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.75rem;
+}
+
+.provider,
+.emailToggle,
+.primary {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--linha);
+  background: var(--papel);
+  color: var(--tinta);
+  padding: 0.85rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.provider:hover,
+.emailToggle:hover {
+  background: var(--nevoa);
+  border-color: var(--salvia);
+}
+
+.primary {
+  background: var(--tinta);
+  color: var(--papel);
+  border-color: var(--tinta);
+  margin-top: 0.75rem;
+}
+
+.primary:hover {
+  background: var(--oliva-esc);
+  border-color: var(--oliva-esc);
+}
+
+.divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.35rem 0;
+  color: var(--grafite);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  height: 1px;
+  background: var(--linha);
+}
+
+.emailForm {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--grafite);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: var(--papel);
+  color: var(--tinta);
+  padding: 0.85rem 0.95rem;
+}
+
+.input:focus {
+  outline: 2px solid var(--oliva);
+  outline-offset: 1px;
+}
+
+.notice {
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  background: var(--nevoa);
+  color: var(--oliva-esc);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.switch {
+  margin: 1.5rem 0 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--grafite);
+}
+
+.switchBtn {
+  border: 0;
+  background: none;
+  color: var(--oliva);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.switchBtn:hover {
+  color: var(--oliva-esc);
+  text-decoration: underline;
+}
+
+.footer {
+  display: flex;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1rem 1.25rem 1.5rem;
+  font-size: 0.8rem;
+  color: var(--grafite);
+}
+
+.footer a:hover {
+  color: var(--oliva);
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 1.5rem 1.15rem 1.35rem;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+}

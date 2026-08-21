@@ -1,0 +1,113 @@
+/* Wider than OrgPage default — Sessions table needs the columns. */
+.wrap {
+  max-width: 64rem;
+}
+
+.intro {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.25rem;
+}
+
+.visit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--oliva);
+}
+
+.visit:hover {
+  color: var(--oliva-esc);
+  text-decoration: underline;
+}
+
+.sessionsTitle {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--tinta);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.table {
+  width: 100%;
+  min-width: 44rem;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.table th,
+.table td {
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--linha);
+}
+
+.table th {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--grafite);
+  background: rgba(228, 230, 221, 0.45);
+  white-space: nowrap;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.appCell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--tinta);
+  word-break: break-all;
+}
+
+.muted {
+  color: var(--grafite);
+}
+
+.signOut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--tinta);
+  cursor: pointer;
+}
+
+.signOut:hover:not(:disabled) {
+  border-color: var(--oliva);
+  color: var(--oliva-esc);
+}
+
+.signOut:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spendBadge {
+  display: inline-block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--grafite);
+}

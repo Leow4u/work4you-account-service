@@ -1,0 +1,167 @@
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) 1fr;
+  background:
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(201, 210, 188, 0.35), transparent 55%),
+    var(--papel);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem 1rem 1.5rem;
+  border-right: 1px solid var(--linha);
+  background: rgba(250, 250, 246, 0.92);
+}
+
+.brandRow {
+  padding: 0.15rem 0.5rem 0.35rem;
+}
+
+.brand img {
+  height: 0.95rem;
+  width: auto;
+}
+
+.account {
+  padding: 0.35rem 0.65rem;
+}
+
+.accountName {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--tinta);
+  word-break: break-word;
+}
+
+.accountMeta {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: var(--grafite);
+}
+
+.balance {
+  margin: 0 0.35rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: var(--papel);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.balanceLabel {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--oliva);
+}
+
+.balanceValue {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--tinta);
+}
+
+.balanceHint {
+  font-size: 0.72rem;
+  color: var(--grafite);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  padding: 0.25rem 0.35rem;
+}
+
+.navLink {
+  display: block;
+  padding: 0.55rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--grafite);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.navLink:hover {
+  color: var(--tinta);
+  background: var(--nevoa);
+}
+
+.navLinkActive {
+  color: var(--tinta);
+  background: var(--salvia);
+}
+
+.sidebarFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem 0;
+  border-top: 1px solid var(--linha);
+}
+
+.footLink {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--oliva);
+}
+
+.footLink:hover {
+  color: var(--oliva-esc);
+}
+
+.logout {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0.4rem 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--grafite);
+}
+
+.logout:hover {
+  color: var(--tinta);
+}
+
+.main {
+  min-width: 0;
+  padding: 1.75rem 1.75rem 2.5rem;
+}
+
+@media (max-width: 800px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--linha);
+  }
+
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 0;
+  }
+
+  .navLink {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.6rem;
+  }
+
+  .main {
+    padding: 1.25rem 1rem 2rem;
+  }
+}

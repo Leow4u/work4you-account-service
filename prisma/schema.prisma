@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  privyDid  String   @unique
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orgs      OrgMember[]
+  sessions  OAuthSession[]
+}
+
+model Org {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  personal  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members   OrgMember[]
+  sessions  OAuthSession[]
+  deviceCodes DeviceCode[]
+}
+
+model OrgMember {
+  id     String @id @default(cuid())
+  orgId  String
+  userId String
+  role   String @default("OWNER")
+  org    Org    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+}
+
+/// Pending device authorization (CLI/Desktop login).
+model DeviceCode {
+  id              String    @id @default(cuid())
+  deviceCodeHash  String    @unique
+  userCode        String    @unique
+  clientId        String
+  scope           String
+  orgId           String?
+  org             Org?      @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  approvedUserId  String?
+  status          String    @default("pending") // pending | approved | denied | expired
+  expiresAt       DateTime
+  intervalSeconds Int       @default(1)
+  createdAt       DateTime  @default(now())
+  approvedAt      DateTime?
+}
+
+/// Active OAuth login session (row on Work4You Agent Sessions table).
+model OAuthSession {
+  id               String    @id @default(cuid())
+  orgId            String
+  userId           String
+  clientId         String
+  scope            String
+  refreshTokenHash String    @unique
+  accessJti        String?
+  expiresAt        DateTime
+  lastActiveAt     DateTime  @default(now())
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  org              Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, revokedAt])
+  @@index([userId, revokedAt])
+}

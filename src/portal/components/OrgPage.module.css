@@ -1,0 +1,117 @@
+.page {
+  max-width: 52rem;
+}
+
+.header {
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.55rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--oliva);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.65rem, 3.5vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+  color: var(--tinta);
+}
+
+.lead {
+  margin: 0.75rem 0 0;
+  max-width: 38rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--grafite);
+}
+
+.body {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: rgba(250, 250, 246, 0.85);
+}
+
+.panelTitle {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.panelText {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--grafite);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.primary,
+.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--oliva);
+  color: #f5f4ee;
+}
+
+.primary:hover {
+  background: var(--oliva-esc);
+}
+
+.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ghost {
+  border: 1px solid var(--linha);
+  background: transparent;
+  color: var(--tinta);
+}
+
+.ghost:hover {
+  border-color: var(--oliva);
+  color: var(--oliva-esc);
+}
+
+.list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--grafite);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.list li + li {
+  margin-top: 0.25rem;
+}
