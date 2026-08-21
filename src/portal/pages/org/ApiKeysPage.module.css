@@ -160,8 +160,17 @@
   min-height: auto;
 }
 
-.linkish:hover {
-  text-decoration: underline;
+.linkish:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.planHint {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--grafite);
 }
 
 .createBox,

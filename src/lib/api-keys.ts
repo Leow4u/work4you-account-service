@@ -1,11 +1,12 @@
 /**
  * Portal static API keys (`sk-work4you-…`) for inference-api / playground.
- * Plaintext secret is returned only at create time; DB stores SHA-256.
+ * Hash for auth; encrypted secret for owner copy-on-return (Hermes).
  */
 import { randomBytes } from 'crypto'
 import type { ApiKey } from '@prisma/client'
 import { prisma } from './db'
 import { sha256 } from './crypto'
+import { decryptSecret, encryptSecret } from './secret-crypto'
 import { moneyAdd } from './tiers'
 
 export const API_KEY_PREFIX = 'sk-work4you-'
@@ -14,6 +15,7 @@ export type ApiKeyPublic = {
   id: string
   name: string
   keyPrefix: string
+  copyable: boolean
   createdAt: string
   createdLabel: string
   lastUsedAt: string | null
@@ -50,6 +52,7 @@ export function toApiKeyPublic(row: ApiKey): ApiKeyPublic {
     id: row.id,
     name: row.name,
     keyPrefix: row.keyPrefix,
+    copyable: Boolean(row.keyEnc),
     createdAt: row.createdAt.toISOString(),
     createdLabel: formatPtDate(row.createdAt),
     lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
@@ -82,15 +85,32 @@ export async function createOrgApiKey(params: {
 }): Promise<{ key: ApiKeyPublic; secret: string }> {
   const name = (params.name?.trim() || 'Chave de API').slice(0, 80)
   const { secret, keyPrefix, keyHash } = mintApiKeySecret()
+  const keyEnc = encryptSecret(secret)
   const row = await prisma.apiKey.create({
     data: {
       orgId: params.orgId,
       name,
       keyHash,
+      keyEnc,
       keyPrefix,
     },
   })
   return { key: toApiKeyPublic(row), secret }
+}
+
+export async function revealOrgApiKeySecret(params: {
+  orgId: string
+  keyId: string
+}): Promise<string | null> {
+  const row = await prisma.apiKey.findFirst({
+    where: { id: params.keyId, orgId: params.orgId, revokedAt: null },
+  })
+  if (!row?.keyEnc) return null
+  try {
+    return decryptSecret(row.keyEnc)
+  } catch {
+    return null
+  }
 }
 
 export async function renameOrgApiKey(params: {

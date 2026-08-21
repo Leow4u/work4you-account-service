@@ -13,9 +13,17 @@ export interface ApiKeyRow {
   id: string
   name: string
   keyPrefix: string
+  copyable: boolean
   createdLabel: string
   lastUsedLabel: string
   totalSpentLabel: string
+}
+
+type CatalogModel = {
+  id: string
+  name: string
+  free: boolean
+  locked: boolean
 }
 
 type PlayMode = 'chat' | 'completion'
@@ -30,42 +38,6 @@ const CODE_LANGS: { id: CodeLang; label: string }[] = [
   { id: 'kotlin', label: 'Kotlin' },
 ]
 
-/** Prefer stable catalog IDs — OpenRouter often lists experimental first. */
-const PREFERRED_MODELS = [
-  'openai/gpt-4o-mini',
-  'google/gemini-2.5-flash',
-  'anthropic/claude-sonnet-4',
-  'deepseek/deepseek-chat',
-  'deepseek/deepseek-v4-flash',
-] as const
-
-function isNoisyModelId(id: string): boolean {
-  const lower = id.toLowerCase()
-  return (
-    lower.includes('-exp') ||
-    lower.includes('-vision-exp') ||
-    lower.startsWith('~') ||
-    lower.endsWith(':free')
-  )
-}
-
-function sortModelIds(ids: string[]): string[] {
-  const set = new Set(ids)
-  const preferred = PREFERRED_MODELS.filter((id) => set.has(id))
-  const rest = ids
-    .filter((id) => !(PREFERRED_MODELS as readonly string[]).includes(id))
-    .sort((a, b) => a.localeCompare(b))
-  return [...preferred, ...rest]
-}
-
-function pickDefaultModel(ids: string[]): string {
-  for (const pref of PREFERRED_MODELS) {
-    if (ids.includes(pref)) return pref
-  }
-  const stable = ids.find((id) => !isNoisyModelId(id))
-  return stable || ids[0] || 'openai/gpt-4o-mini'
-}
-
 export function ApiKeysPage() {
   const { getAccessToken, authenticated, ready } = usePrivy()
   const [keys, setKeys] = useState<ApiKeyRow[]>([])
@@ -77,20 +49,19 @@ export function ApiKeysPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
 
-  // Playground
   const [playMode, setPlayMode] = useState<PlayMode>('chat')
-  const [models, setModels] = useState<string[]>([])
-  const [model, setModel] = useState<string>('openai/gpt-4o-mini')
-  const [selectedKeyId, setSelectedKeyId] = useState<string>('')
-  const [playgroundSecret, setPlaygroundSecret] = useState('')
+  const [catalog, setCatalog] = useState<CatalogModel[]>([])
+  const [model, setModel] = useState('openai/gpt-4o-mini')
+  const [selectedKeyId, setSelectedKeyId] = useState('')
   const [maxTokens, setMaxTokens] = useState(1024)
-  const [systemPrompt, setSystemPrompt] = useState('')
+  const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.')
   const [userPrompt, setUserPrompt] = useState('')
   const [completionPrompt, setCompletionPrompt] = useState('')
   const [showCode, setShowCode] = useState(false)
   const [codeLang, setCodeLang] = useState<CodeLang>('curl')
   const [responseText, setResponseText] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [snippetSecret, setSnippetSecret] = useState('sk-work4you-…')
 
   const authHeaders = useCallback(async () => {
     const token = await getAccessToken()
@@ -98,7 +69,7 @@ export function ApiKeysPage() {
     return { Authorization: `Bearer ${token}` }
   }, [getAccessToken])
 
-  const load = useCallback(async () => {
+  const loadKeys = useCallback(async () => {
     if (!authenticated) {
       setKeys([])
       setLoading(false)
@@ -116,7 +87,10 @@ export function ApiKeysPage() {
       const data = (await res.json()) as { keys?: ApiKeyRow[] }
       const list = Array.isArray(data.keys) ? data.keys : []
       setKeys(list)
-      setSelectedKeyId((prev) => prev || (list[0]?.id ?? ''))
+      setSelectedKeyId((prev) => {
+        if (prev && list.some((k) => k.id === prev)) return prev
+        return list[0]?.id ?? ''
+      })
     } catch {
       setKeys([])
     } finally {
@@ -124,10 +98,58 @@ export function ApiKeysPage() {
     }
   }, [authenticated, authHeaders])
 
+  const loadModels = useCallback(async () => {
+    if (!authenticated) {
+      setCatalog([])
+      return
+    }
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const res = await fetch('/api/keys/models', { headers })
+      if (!res.ok) return
+      const data = (await res.json()) as {
+        defaultModel?: string
+        models?: CatalogModel[]
+      }
+      const models = Array.isArray(data.models) ? data.models : []
+      setCatalog(models)
+      setModel((prev) => {
+        const stillOk = models.some((m) => m.id === prev && !m.locked)
+        if (stillOk) return prev
+        return data.defaultModel || models.find((m) => !m.locked)?.id || prev
+      })
+    } catch {
+      /* catalog optional */
+    }
+  }, [authenticated, authHeaders])
+
   useEffect(() => {
     if (!ready) return
-    void load()
-  }, [ready, load])
+    void loadKeys()
+    void loadModels()
+  }, [ready, loadKeys, loadModels])
+
+  useEffect(() => {
+    if (!selectedKeyId || !authenticated) return
+    const row = keys.find((k) => k.id === selectedKeyId)
+    if (!row?.copyable) {
+      setSnippetSecret('sk-work4you-…')
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const headers = await authHeaders()
+      if (!headers || cancelled) return
+      const res = await fetch(`/api/keys/${selectedKeyId}/secret`, { headers })
+      if (!res.ok || cancelled) return
+      const data = (await res.json()) as { secret?: string }
+      if (data.secret && !cancelled) setSnippetSecret(data.secret)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedKeyId, keys, authenticated, authHeaders])
 
   async function createKey() {
     setBusy('create')
@@ -142,11 +164,33 @@ export function ApiKeysPage() {
       if (!res.ok) return
       const data = (await res.json()) as { key: ApiKeyRow; secret: string }
       setRevealedSecret(data.secret)
-      setPlaygroundSecret(data.secret)
+      setSnippetSecret(data.secret)
       setSelectedKeyId(data.key.id)
       setCreateOpen(false)
       setCreateName('Chave de API')
-      await load()
+      await loadKeys()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function copyKeySecret(id: string) {
+    setBusy(`copy:${id}`)
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const res = await fetch(`/api/keys/${id}/secret`, { headers })
+      if (!res.ok) {
+        setResponseText(
+          'Esta chave não pode ser copiada (criada antes do suporte a revelação). Revoga e cria outra.',
+        )
+        return
+      }
+      const data = (await res.json()) as { secret?: string }
+      if (!data.secret) return
+      setSnippetSecret(data.secret)
+      if (selectedKeyId === id) setRevealedSecret(data.secret)
+      await navigator.clipboard.writeText(data.secret)
     } finally {
       setBusy(null)
     }
@@ -164,7 +208,7 @@ export function ApiKeysPage() {
       })
       if (res.ok) {
         setEditingId(null)
-        await load()
+        await loadKeys()
       }
     } finally {
       setBusy(null)
@@ -181,9 +225,12 @@ export function ApiKeysPage() {
         headers,
       })
       if (res.ok) {
-        if (selectedKeyId === id) setSelectedKeyId('')
-        if (revealedSecret) setRevealedSecret(null)
-        await load()
+        if (selectedKeyId === id) {
+          setSelectedKeyId('')
+          setRevealedSecret(null)
+          setSnippetSecret('sk-work4you-…')
+        }
+        await loadKeys()
       }
     } finally {
       setBusy(null)
@@ -198,48 +245,17 @@ export function ApiKeysPage() {
     }
   }
 
-  const effectiveSecret = useMemo(() => {
-    if (playgroundSecret.trim()) return playgroundSecret.trim()
-    if (revealedSecret && selectedKeyId) {
-      const match = keys.find((k) => k.id === selectedKeyId)
-      if (match) return revealedSecret
-    }
-    return ''
-  }, [playgroundSecret, revealedSecret, selectedKeyId, keys])
-
-  useEffect(() => {
-    if (!effectiveSecret) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await fetch(`${INFERENCE_BASE}/v1/models`, {
-          headers: { Authorization: `Bearer ${effectiveSecret}` },
-        })
-        if (!res.ok || cancelled) return
-        const data = (await res.json()) as {
-          data?: Array<{ id?: string }>
-        }
-        const ids = (data.data || [])
-          .map((m) => m.id)
-          .filter((id): id is string => Boolean(id))
-        if (!cancelled && ids.length) {
-          const sorted = sortModelIds(ids)
-          setModels(sorted)
-          setModel((prev) =>
-            prev && sorted.includes(prev) ? prev : pickDefaultModel(sorted),
-          )
-        }
-      } catch {
-        /* catalog optional until key works */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [effectiveSecret])
+  const unlockedModels = useMemo(
+    () => catalog.filter((m) => !m.locked),
+    [catalog],
+  )
+  const lockedModels = useMemo(
+    () => catalog.filter((m) => m.locked),
+    [catalog],
+  )
 
   const codeSnippet = useMemo(() => {
-    const key = effectiveSecret || 'sk-work4you-…'
+    const key = snippetSecret
     const base = INFERENCE_BASE
     const mt = Math.min(4096, Math.max(1, maxTokens))
     if (playMode === 'chat') {
@@ -258,13 +274,12 @@ export function ApiKeysPage() {
         case 'curl':
           return `curl ${base}/v1/chat/completions \\\n  -H "Authorization: Bearer ${key}" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(body)}'`
         case 'node':
-          return `const res = await fetch("${base}/v1/chat/completions", {\n  method: "POST",\n  headers: {\n    Authorization: "Bearer ${key}",\n    "Content-Type": "application/json",\n  },\n  body: JSON.stringify(${json}),\n});\nconsole.log(await res.json());`
         case 'browser':
           return `const res = await fetch("${base}/v1/chat/completions", {\n  method: "POST",\n  headers: {\n    Authorization: "Bearer ${key}",\n    "Content-Type": "application/json",\n  },\n  body: JSON.stringify(${json}),\n});\nconsole.log(await res.json());`
         case 'python':
           return `import requests\n\nr = requests.post(\n    "${base}/v1/chat/completions",\n    headers={"Authorization": f"Bearer ${key}"},\n    json=${json},\n)\nprint(r.json())`
         case 'go':
-          return `// POST ${base}/v1/chat/completions\n// Authorization: Bearer ${key}\n// Content-Type: application/json\n// Body: ${JSON.stringify(body)}`
+          return `// POST ${base}/v1/chat/completions\n// Authorization: Bearer ${key}\n// Body: ${JSON.stringify(body)}`
         case 'kotlin':
           return `// POST ${base}/v1/chat/completions\n// Authorization: Bearer ${key}\n// body = ${JSON.stringify(body)}`
       }
@@ -291,25 +306,41 @@ export function ApiKeysPage() {
   }, [
     codeLang,
     completionPrompt,
-    effectiveSecret,
     maxTokens,
     model,
     playMode,
+    snippetSecret,
     systemPrompt,
     userPrompt,
   ])
 
   async function generate() {
-    if (!effectiveSecret) {
-      setResponseText('Seleccione ou cole uma chave sk-work4you-…')
+    if (!selectedKeyId) {
+      setResponseText('Selecione uma chave')
+      return
+    }
+    const chosen = catalog.find((m) => m.id === model)
+    if (chosen?.locked) {
+      setResponseText(
+        JSON.stringify(
+          {
+            error: {
+              message: 'Modelo disponível apenas em planos pagos.',
+              code: 'paid_plan_required',
+            },
+          },
+          null,
+          2,
+        ),
+      )
       return
     }
     setGenerating(true)
     setResponseText('')
     try {
+      const headers = await authHeaders()
+      if (!headers) return
       const mt = Math.min(4096, Math.max(1, Number(maxTokens) || 1024))
-      const path =
-        playMode === 'chat' ? '/v1/chat/completions' : '/v1/completions'
       const body =
         playMode === 'chat'
           ? {
@@ -327,44 +358,22 @@ export function ApiKeysPage() {
               max_tokens: mt,
               prompt: completionPrompt || 'Olá',
             }
-      const res = await fetch(`${INFERENCE_BASE}${path}`, {
+      const res = await fetch('/api/keys/playground', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${effectiveSecret}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyId: selectedKeyId,
+          mode: playMode,
+          body,
+        }),
       })
       const text = await res.text()
       try {
-        const parsed = JSON.parse(text) as {
-          error?: { message?: string; code?: number | string }
-        }
-        const msg = parsed?.error?.message || ''
-        if (
-          typeof msg === 'string' &&
-          msg.includes('guardrail restrictions and data policy')
-        ) {
-          setResponseText(
-            JSON.stringify(
-              {
-                error: {
-                  message:
-                    'Este modelo não está disponível com a política actual do gateway. Escolhe outro (ex.: openai/gpt-4o-mini).',
-                  code: parsed.error?.code ?? 404,
-                  upstream: msg,
-                },
-              },
-              null,
-              2,
-            ),
-          )
-        } else {
-          setResponseText(JSON.stringify(parsed, null, 2))
-        }
+        setResponseText(JSON.stringify(JSON.parse(text), null, 2))
       } catch {
         setResponseText(text)
       }
+      await loadKeys()
     } catch (err) {
       setResponseText(err instanceof Error ? err.message : 'erro')
     } finally {
@@ -485,15 +494,21 @@ export function ApiKeysPage() {
                       </td>
                       <td className={styles.keyCell}>
                         <span>{row.keyPrefix}</span>
-                        {revealedSecret && selectedKeyId === row.id ? (
-                          <button
-                            type="button"
-                            className={styles.linkish}
-                            onClick={() => void copyText(revealedSecret)}
-                          >
-                            Copiar
-                          </button>
-                        ) : null}
+                        <button
+                          type="button"
+                          className={styles.linkish}
+                          disabled={
+                            !row.copyable || busy === `copy:${row.id}`
+                          }
+                          title={
+                            row.copyable
+                              ? 'Copiar chave'
+                              : 'Recria a chave para poder copiar'
+                          }
+                          onClick={() => void copyKeySecret(row.id)}
+                        >
+                          Copiar
+                        </button>
                       </td>
                       <td className={styles.muted}>{row.createdLabel}</td>
                       <td className={styles.muted}>{row.lastUsedLabel}</td>
@@ -530,7 +545,9 @@ export function ApiKeysPage() {
             </button>
             <button
               type="button"
-              className={playMode === 'completion' ? styles.tabOn : styles.tab}
+              className={
+                playMode === 'completion' ? styles.tabOn : styles.tab
+              }
               onClick={() => setPlayMode('completion')}
             >
               Completion
@@ -540,37 +557,60 @@ export function ApiKeysPage() {
           <div className={styles.playGrid}>
             <label className={styles.label}>
               Modelo
-              {models.length ? (
-                <select
-                  className={styles.input}
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                >
-                  {models.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  className={styles.input}
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="openai/gpt-4o-mini"
-                />
-              )}
+              <select
+                className={styles.input}
+                value={model}
+                onChange={(e) => {
+                  const id = e.target.value
+                  const hit = catalog.find((m) => m.id === id)
+                  if (hit?.locked) return
+                  setModel(id)
+                }}
+              >
+                {unlockedModels.length ? (
+                  <optgroup label="Disponíveis">
+                    {unlockedModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : (
+                  <option value={model}>{model}</option>
+                )}
+                {lockedModels.length ? (
+                  <optgroup label="Plano pago">
+                    {lockedModels.map((m) => (
+                      <option key={m.id} value={m.id} disabled>
+                        {`🔒 ${m.id}`}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </select>
             </label>
 
             <label className={styles.label}>
               Chave
-              <input
+              <select
                 className={styles.input}
-                value={playgroundSecret}
-                onChange={(e) => setPlaygroundSecret(e.target.value)}
-                placeholder="sk-work4you-…"
-                autoComplete="off"
-              />
+                value={selectedKeyId}
+                onChange={(e) => {
+                  setSelectedKeyId(e.target.value)
+                  setRevealedSecret(null)
+                  setSnippetSecret('sk-work4you-…')
+                }}
+              >
+                {!keys.length ? (
+                  <option value="">Sem chaves</option>
+                ) : (
+                  keys.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.name}
+                    </option>
+                  ))
+                )}
+              </select>
             </label>
 
             <label className={styles.label}>
@@ -589,6 +629,8 @@ export function ApiKeysPage() {
               />
             </label>
           </div>
+
+          {/* locks in the model select are enough — no plan legend */}
 
           {playMode === 'chat' ? (
             <div className={styles.promptStack}>
@@ -634,7 +676,7 @@ export function ApiKeysPage() {
             <button
               type="button"
               className={styles.primary}
-              disabled={generating}
+              disabled={generating || !selectedKeyId}
               onClick={() => void generate()}
             >
               Gerar
@@ -656,9 +698,7 @@ export function ApiKeysPage() {
                   <button
                     key={l.id}
                     type="button"
-                    className={
-                      codeLang === l.id ? styles.tabOn : styles.tab
-                    }
+                    className={codeLang === l.id ? styles.tabOn : styles.tab}
                     onClick={() => setCodeLang(l.id)}
                   >
                     {l.label}

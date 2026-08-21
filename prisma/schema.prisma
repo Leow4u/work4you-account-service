@@ -123,7 +123,8 @@ model OAuthSession {
   @@index([userId, revokedAt])
 }
 
-/// Static Portal inference keys (`sk-work4you-…`). Secret stored as SHA-256 only.
+/// Static Portal inference keys (`sk-work4you-…`).
+/// `keyHash` for auth; `keyEnc` (AES-GCM) so owners can copy again (Hermes).
 model ApiKey {
   id             String    @id @default(cuid())
   orgId          String
@@ -131,6 +132,8 @@ model ApiKey {
   name           String    @default("Chave de API")
   /// SHA-256 hex of the full secret.
   keyHash        String    @unique
+  /// AES-GCM ciphertext (base64url) of the secret for owner reveal/copy.
+  keyEnc         String?
   /// Display prefix e.g. sk-work4you-Ab12…x9Qz
   keyPrefix      String
   totalSpentUsd  String    @default("0")
