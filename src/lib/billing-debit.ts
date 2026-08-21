@@ -34,8 +34,10 @@ export type DebitResult =
       totalUsableCredits: string
     }
 
+/** Inference needs sub-cent precision (Hermes shows $0.000000-style spend). */
 function normUsd(n: number): string {
-  return n.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+  const s = n.toFixed(6)
+  return s.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '') || '0'
 }
 
 export async function debitOrgCredits(params: {
@@ -127,12 +129,12 @@ export async function debitOrgCredits(params: {
         : subAvail
     const remainder =
       moneyCmp(amountUsd, fromSub) > 0
-        ? moneySub(amountUsd, fromSub)
+        ? moneySub(amountUsd, fromSub, 6)
         : '0'
-    const newSub = moneySub(subAvail, fromSub)
-    const newPurchased = moneySub(org.balanceUsd || '0', remainder)
-    const newSpent = moneyAdd(org.spentThisPeriodUsd || '0', amountUsd)
-    const newMonthly = moneyAdd(org.monthlySpentUsd || '0', amountUsd)
+    const newSub = moneySub(subAvail, fromSub, 6)
+    const newPurchased = moneySub(org.balanceUsd || '0', remainder, 6)
+    const newSpent = moneyAdd(org.spentThisPeriodUsd || '0', amountUsd, 6)
+    const newMonthly = moneyAdd(org.monthlySpentUsd || '0', amountUsd, 6)
 
     const debit = await tx.billingDebit.create({
       data: {

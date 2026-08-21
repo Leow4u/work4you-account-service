@@ -76,16 +76,29 @@ export function tierIdFromPriceId(priceId: string): TierId | null {
   return null
 }
 
-/** Decimal-string add (2dp). */
-export function moneyAdd(a: string, b: string): string {
-  return (Number(a || 0) + Number(b || 0)).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1')
+/** Trim trailing zeros but keep at least 2 fractional digits for display money. */
+function trimMoney(s: string, minFrac = 2): string {
+  if (!s.includes('.')) return s
+  const [i, f = ''] = s.split('.')
+  const frac = f.replace(/0+$/, '')
+  if (frac.length >= minFrac) return `${i}.${frac}`
+  return `${i}.${f.slice(0, minFrac).padEnd(minFrac, '0')}`.replace(/\.$/, '')
 }
 
-export function moneySub(a: string, b: string): string {
-  return Math.max(0, Number(a || 0) - Number(b || 0))
-    .toFixed(2)
-    .replace(/\.00$/, '')
-    .replace(/(\.\d)0$/, '$1')
+/**
+ * Decimal-string add.
+ * Default 2dp (Stripe top-ups / plan dollars). Pass `dp=6` for inference meter
+ * (Hermes-style sub-cent spend).
+ */
+export function moneyAdd(a: string, b: string, dp = 2): string {
+  return trimMoney((Number(a || 0) + Number(b || 0)).toFixed(dp), Math.min(2, dp))
+}
+
+export function moneySub(a: string, b: string, dp = 2): string {
+  return trimMoney(
+    Math.max(0, Number(a || 0) - Number(b || 0)).toFixed(dp),
+    Math.min(2, dp),
+  )
 }
 
 export function moneyCmp(a: string, b: string): number {
