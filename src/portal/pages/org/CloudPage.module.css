@@ -1,0 +1,296 @@
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.sectionLead {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--grafite);
+}
+
+.primary,
+.ghost,
+.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.35rem;
+  padding: 0.4rem 0.95rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--oliva);
+  color: #f5f4ee;
+}
+
+.primary:hover {
+  background: var(--oliva-esc);
+}
+
+.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ghost {
+  border: 1px solid var(--linha);
+  background: transparent;
+  color: var(--tinta);
+}
+
+.danger {
+  border: 1px solid #c45c4a;
+  background: transparent;
+  color: #8f3a2c;
+}
+
+.errorBanner {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 6px;
+  background: #f8e8e4;
+  color: #7a3226;
+  font-size: 0.875rem;
+}
+
+.grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.card {
+  padding: 1.05rem 1.15rem;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: rgba(250, 250, 246, 0.9);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.nameBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--tinta);
+  cursor: pointer;
+  text-align: left;
+}
+
+.nameBtn:hover {
+  color: var(--oliva);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.toneOnline {
+  background: #dce8d4;
+  color: #2f4a28;
+}
+
+.toneWarm {
+  background: #efe4c8;
+  color: #6a5320;
+}
+
+.toneError {
+  background: #f3d7d1;
+  color: #7a3226;
+}
+
+.toneMuted {
+  background: var(--nevoa);
+  color: var(--grafite);
+}
+
+.meta {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.meta div {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+}
+
+.meta dt {
+  margin: 0;
+  color: var(--grafite);
+  font-weight: 600;
+}
+
+.meta dd {
+  margin: 0;
+  color: var(--tinta);
+}
+
+.cardError {
+  margin: 0.65rem 0 0;
+  font-size: 0.8rem;
+  color: #8f3a2c;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.renameRow {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.input {
+  width: 100%;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--linha);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--tinta);
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--grafite);
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(21, 21, 21, 0.45);
+}
+
+.modal {
+  width: min(34rem, 100%);
+  max-height: min(90vh, 40rem);
+  overflow: auto;
+  padding: 1.25rem 1.3rem 1.15rem;
+  border-radius: 10px;
+  background: var(--papel);
+  border: 1px solid var(--linha);
+  box-shadow: 0 18px 48px rgba(21, 21, 21, 0.18);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--tinta);
+}
+
+.modalLead {
+  margin: 0.45rem 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--grafite);
+}
+
+.sizeGrid {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.sizeCard {
+  display: grid;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--linha);
+  background: #fff;
+  cursor: pointer;
+  color: var(--tinta);
+}
+
+.sizeCard strong {
+  font-size: 0.95rem;
+}
+
+.sizeCard span {
+  font-size: 0.8rem;
+  color: var(--grafite);
+}
+
+.sizeCardActive {
+  border-color: var(--oliva);
+  background: rgba(201, 210, 188, 0.35);
+  box-shadow: inset 0 0 0 1px var(--oliva);
+}
+
+.priceLine {
+  font-weight: 600 !important;
+  color: var(--tinta) !important;
+}
+
+.modalHint {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  color: var(--grafite);
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .meta div {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}

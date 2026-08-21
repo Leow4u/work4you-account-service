@@ -31,6 +31,7 @@ model Org {
   charges   BillingCharge[]
   debits    BillingDebit[]
   apiKeys   ApiKey[]
+  agents    AgentInstance[]
 
   /// Top-up / purchased credit balance (decimal STRING, never float).
   balanceUsd String @default("0")
@@ -152,6 +153,47 @@ model ApiKey {
   updatedAt      DateTime  @updatedAt
 
   @@index([orgId, revokedAt])
+}
+
+/// Hosted Work4You Cloud agent VM (one Fly app per instance).
+/// Desktop discovery DTO: GET /api/agents → { id, name, status, dashboardUrl, dashboardGatewayState }.
+model AgentInstance {
+  id                     String    @id @default(cuid())
+  orgId                  String
+  org                    Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  /// Display name (Hermes Create modal).
+  name                   String
+  /// URL-safe unique slug → Fly app `w4y-agent-<slug>`.
+  slug                   String    @unique
+  /// small | medium | large
+  size                   String    @default("small")
+  /// Preferred model id (informational; agent config may mirror later).
+  model                  String?
+  /// provisioning | starting | online | stopped | error | deleting
+  status                 String    @default("provisioning")
+  flyAppName             String?   @unique
+  flyMachineId           String?
+  flyVolumeId            String?
+  flyRegion              String    @default("gru")
+  dashboardUrl           String?
+  /// active | degraded | down | unknown
+  dashboardGatewayState  String    @default("unknown")
+  errorMessage           String?
+  cpus                   Int       @default(2)
+  memoryMb               Int       @default(1024)
+  diskGb                 Int       @default(10)
+  maxSessions            Int       @default(5)
+  /// Estimated running $/day (display only).
+  priceRunningUsd        String    @default("0")
+  /// Estimated stopped/storage $/day (display only).
+  priceStoppedUsd        String    @default("0")
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  startedAt              DateTime?
+  stoppedAt              DateTime?
+
+  @@index([orgId, status])
+  @@index([orgId, createdAt])
 }
 
 /// One top-up charge (CLI poll contract).
