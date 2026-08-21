@@ -272,7 +272,7 @@ export function UsagePage() {
       <OrgPage
         eyebrow="Usage"
         title="Utilização"
-        lead="Gasto e pedidos do período a partir dos débitos de inference — o mesmo ledger que alimenta Billing e /usage."
+        lead="Gasto, pedidos e tokens do período a partir dos débitos de inference — o mesmo ledger que alimenta Billing e /usage."
       >
         <div className={styles.creditTabs} role="tablist" aria-label="Tipo de crédito">
           {CREDIT_TABS.map((tab) => (

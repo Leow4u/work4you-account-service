@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { debitOrgCredits } from '@/lib/billing-debit'
 import { buildPaidServiceAccess } from '@/lib/account-entitlement'
+import {
+  metersHaveTokens,
+  normalizeUsageMeters,
+} from '@/lib/usage-meters'
 
 export const runtime = 'nodejs'
 
@@ -21,12 +25,15 @@ function assertInferenceAuth(req: NextRequest): boolean {
 
 /**
  * POST /api/internal/billing/debit
- * Body: { orgId, amountUsd, idempotencyKey, purpose? }
+ * Body: {
+ *   orgId, amountUsd, idempotencyKey, purpose?,
+ *   inputTokens?, outputTokens?, cacheReadTokens?, cacheWriteTokens?,
+ *   apiKeyId?
+ * }
  *
+ * amountUsd may be 0 when token meters are present (free / zero-cost settle).
  * On success: 200 settled/replay.
- * On empty balance: 402 { error: "no_usable_credits", paid_service_access }.
- * Fork billing wall triggers on inference 402; this is what inference calls
- * after metering (or before, with a tiny authorize check).
+ * On empty balance (paid amount): 402 { error: "no_usable_credits", ... }.
  */
 export async function POST(req: NextRequest) {
   if (!assertInferenceAuth(req)) {
@@ -39,13 +46,30 @@ export async function POST(req: NextRequest) {
     idempotencyKey?: string
     purpose?: string
     apiKeyId?: string
+    inputTokens?: number
+    outputTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
   }
 
   const orgId = body.orgId?.trim()
   const idempotencyKey = body.idempotencyKey?.trim()
   const apiKeyId = body.apiKeyId?.trim() || null
   const amount = Number(body.amountUsd)
-  if (!orgId || !idempotencyKey || !Number.isFinite(amount) || amount <= 0) {
+  const meters = normalizeUsageMeters({
+    inputTokens: body.inputTokens,
+    outputTokens: body.outputTokens,
+    cacheReadTokens: body.cacheReadTokens,
+    cacheWriteTokens: body.cacheWriteTokens,
+  })
+
+  if (
+    !orgId ||
+    !idempotencyKey ||
+    !Number.isFinite(amount) ||
+    amount < 0 ||
+    (amount === 0 && !metersHaveTokens(meters))
+  ) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
   }
 
@@ -60,6 +84,7 @@ export async function POST(req: NextRequest) {
       amountUsd: amount,
       idempotencyKey,
       purpose: body.purpose,
+      meters,
     })
 
     if (result.status === 'insufficient') {
@@ -78,7 +103,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    if (apiKeyId && result.status === 'settled') {
+    if (apiKeyId && result.status === 'settled' && amount > 0) {
       const { recordApiKeySpend } = await import('@/lib/api-keys')
       await recordApiKeySpend({
         keyId: apiKeyId,

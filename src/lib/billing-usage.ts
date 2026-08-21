@@ -14,6 +14,10 @@ export type DebitUsageRow = {
   purchasedTakenUsd: string
   purpose: string | null
   createdAt: Date
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
 }
 
 export type UsagePoint = {
@@ -75,6 +79,7 @@ export function debitCountsForScope(
   row: DebitUsageRow,
   scope: CreditScope,
 ): boolean {
+  if (scope === 'all') return true
   return debitAmountForScope(row, scope) > 0
 }
 
@@ -198,10 +203,14 @@ export function buildUsageReport(
 
   let spend = 0
   let requests = 0
+  let inputTokens = 0
+  let outputTokens = 0
+  let cacheReads = 0
+  let cacheWrites = 0
 
   for (const row of rows) {
+    if (!debitCountsForScope(row, creditScope)) continue
     const amount = debitAmountForScope(row, creditScope)
-    if (!(amount > 0)) continue
     const t = bucketStart(row.createdAt, granularity).toISOString()
     if (!bucketIndex.has(t)) continue
 
@@ -213,12 +222,26 @@ export function buildUsageReport(
     }
     const idx = bucketIndex.get(t)!
     const p = points[idx]!
+    const inTok = Math.max(0, Math.floor(Number(row.inputTokens) || 0))
+    const outTok = Math.max(0, Math.floor(Number(row.outputTokens) || 0))
+    const cr = Math.max(0, Math.floor(Number(row.cacheReadTokens) || 0))
+    const cw = Math.max(0, Math.floor(Number(row.cacheWriteTokens) || 0))
+
     p.spendUsd += amount
     p.creditsUsd += amount
     p.requests += 1
+    p.inputTokens += inTok
+    p.outputTokens += outTok
+    p.cacheReads += cr
+    p.cacheWrites += cw
+    p.totalTokens += inTok + outTok
 
     spend += amount
     requests += 1
+    inputTokens += inTok
+    outputTokens += outTok
+    cacheReads += cr
+    cacheWrites += cw
   }
 
   const series: UsageSeries[] = [...byGroup.entries()]
@@ -243,11 +266,11 @@ export function buildUsageReport(
       spendUsd: fmtUsd(spend),
       creditsUsd: fmtUsd(spend),
       requests,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReads: 0,
-      cacheWrites: 0,
-      totalTokens: 0,
+      inputTokens,
+      outputTokens,
+      cacheReads,
+      cacheWrites,
+      totalTokens: inputTokens + outputTokens,
     },
     buckets,
     series,

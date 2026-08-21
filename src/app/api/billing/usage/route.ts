@@ -16,8 +16,7 @@ const MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000
  * GET /api/billing/usage
  * Auth: Bearer Privy (Portal) OR Work4You OAuth JWT (CLI).
  *
- * Aggregates existing BillingDebit rows (spend / requests / model / credit scope).
- * Token & cache totals are 0 — not stored on debit today.
+ * Aggregates existing BillingDebit rows (spend / requests / tokens / model / credit scope).
  *
  * Query: from, to (ISO), granularity=hour|day|week, creditScope=all|api|subscription,
  *        groupBy=model
@@ -72,6 +71,10 @@ export async function GET(req: NextRequest) {
       purchasedTakenUsd: true,
       purpose: true,
       createdAt: true,
+      inputTokens: true,
+      outputTokens: true,
+      cacheReadTokens: true,
+      cacheWriteTokens: true,
     },
     orderBy: { createdAt: 'asc' },
   })

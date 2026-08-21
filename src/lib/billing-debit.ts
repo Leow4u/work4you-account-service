@@ -1,10 +1,18 @@
 /**
  * Inference debit — subscription credits first, then purchased top-up (Nous rule).
  * Called by inference-api via internal auth (not the CLI).
+ *
+ * Also records OpenRouter usage meters on the same BillingDebit row (Hermes Usage).
+ * amountUsd may be 0 for free / zero-cost calls when tokens are present (meter-only).
  */
 import type { Org } from '@prisma/client'
 import { prisma } from './db'
 import { moneyAdd, moneyCmp, moneySub, totalSpendable } from './tiers'
+import {
+  metersHaveTokens,
+  normalizeUsageMeters,
+  type UsageMeters,
+} from './usage-meters'
 
 export type DebitResult =
   | {
@@ -16,6 +24,7 @@ export type DebitResult =
       subscriptionCreditsUsd: string
       purchasedCreditsUsd: string
       totalUsableCredits: string
+      meters: UsageMeters
     }
   | {
       status: 'insufficient'
@@ -32,6 +41,7 @@ export type DebitResult =
       subscriptionCreditsUsd: string
       purchasedCreditsUsd: string
       totalUsableCredits: string
+      meters: UsageMeters
     }
 
 /** Inference needs sub-cent precision (Hermes shows $0.000000-style spend). */
@@ -40,17 +50,37 @@ function normUsd(n: number): string {
   return s.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '') || '0'
 }
 
+function metersFromDebit(row: {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}): UsageMeters {
+  return {
+    inputTokens: row.inputTokens || 0,
+    outputTokens: row.outputTokens || 0,
+    cacheReadTokens: row.cacheReadTokens || 0,
+    cacheWriteTokens: row.cacheWriteTokens || 0,
+  }
+}
+
 export async function debitOrgCredits(params: {
   org: Org
   amountUsd: number
   idempotencyKey: string
   purpose?: string | null
+  meters?: Partial<UsageMeters> | null
 }): Promise<DebitResult> {
   const amount = params.amountUsd
-  if (!Number.isFinite(amount) || amount <= 0) {
+  if (!Number.isFinite(amount) || amount < 0) {
     throw new Error('invalid_amount')
   }
-  const amountUsd = normUsd(amount)
+  const meters = normalizeUsageMeters(params.meters)
+  if (amount === 0 && !metersHaveTokens(meters)) {
+    throw new Error('invalid_amount')
+  }
+  const amountUsd = amount === 0 ? '0' : normUsd(amount)
+  const meterOnly = amount === 0
 
   const existing = await prisma.billingDebit.findUnique({
     where: {
@@ -76,6 +106,7 @@ export async function debitOrgCredits(params: {
         org.subscriptionCreditsUsd,
         org.balanceUsd,
       ),
+      meters: metersFromDebit(existing),
     }
   }
 
@@ -106,6 +137,38 @@ export async function debitOrgCredits(params: {
           org.subscriptionCreditsUsd,
           org.balanceUsd,
         ),
+        meters: metersFromDebit(dup),
+      }
+    }
+
+    if (meterOnly) {
+      const debit = await tx.billingDebit.create({
+        data: {
+          orgId: org.id,
+          amountUsd: '0',
+          subscriptionTakenUsd: '0',
+          purchasedTakenUsd: '0',
+          idempotencyKey: params.idempotencyKey,
+          purpose: params.purpose || 'inference',
+          inputTokens: meters.inputTokens,
+          outputTokens: meters.outputTokens,
+          cacheReadTokens: meters.cacheReadTokens,
+          cacheWriteTokens: meters.cacheWriteTokens,
+        },
+      })
+      return {
+        status: 'settled' as const,
+        debitId: debit.id,
+        amountUsd: '0',
+        subscriptionTakenUsd: '0',
+        purchasedTakenUsd: '0',
+        subscriptionCreditsUsd: org.subscriptionCreditsUsd,
+        purchasedCreditsUsd: org.balanceUsd,
+        totalUsableCredits: totalSpendable(
+          org.subscriptionCreditsUsd,
+          org.balanceUsd,
+        ),
+        meters,
       }
     }
 
@@ -124,9 +187,7 @@ export async function debitOrgCredits(params: {
 
     const subAvail = org.subscriptionCreditsUsd || '0'
     const fromSub =
-      moneyCmp(subAvail, amountUsd) >= 0
-        ? amountUsd
-        : subAvail
+      moneyCmp(subAvail, amountUsd) >= 0 ? amountUsd : subAvail
     const remainder =
       moneyCmp(amountUsd, fromSub) > 0
         ? moneySub(amountUsd, fromSub, 6)
@@ -144,6 +205,10 @@ export async function debitOrgCredits(params: {
         purchasedTakenUsd: remainder,
         idempotencyKey: params.idempotencyKey,
         purpose: params.purpose || 'inference',
+        inputTokens: meters.inputTokens,
+        outputTokens: meters.outputTokens,
+        cacheReadTokens: meters.cacheReadTokens,
+        cacheWriteTokens: meters.cacheWriteTokens,
       },
     })
 
@@ -169,6 +234,7 @@ export async function debitOrgCredits(params: {
         updated.subscriptionCreditsUsd,
         updated.balanceUsd,
       ),
+      meters,
     }
   })
 }
