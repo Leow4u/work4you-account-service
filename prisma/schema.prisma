@@ -28,6 +28,22 @@ model Org {
   members   OrgMember[]
   sessions  OAuthSession[]
   deviceCodes DeviceCode[]
+
+  /// Purchased credit balance as a decimal STRING (never float).
+  balanceUsd String @default("0")
+  /// Per-org kill-switch for CLI Remote Spending.
+  cliBillingEnabled Boolean @default(true)
+  stripeCustomerId  String?
+  stripeDefaultPmId String?
+  cardBrand         String?
+  cardLast4         String?
+  autoReloadEnabled Boolean @default(false)
+  /// Decimal strings when auto-reload is configured.
+  autoReloadThresholdUsd String?
+  autoReloadAmountUsd    String?
+  /// Null = use default ceiling on the client; otherwise decimal string.
+  monthlyCapUsd   String?
+  monthlySpentUsd String  @default("0")
 }
 
 model OrgMember {

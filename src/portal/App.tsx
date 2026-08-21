@@ -1,8 +1,10 @@
 'use client'
 
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { usePrivy } from '@privy-io/react-auth'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { PortalShell } from './components/PortalShell'
 import { RequirePersonalOrg } from './components/RequireAuth'
+import { personalOrgId } from './lib/org'
 import { DeviceApprovePage } from './pages/DeviceApprovePage'
 import { LoginPage } from './pages/LoginPage'
 import { AccountSettingsPage } from './pages/org/AccountSettingsPage'
@@ -14,12 +16,40 @@ import { InfoPage } from './pages/org/InfoPage'
 import { LocalDashboardsPage } from './pages/org/LocalDashboardsPage'
 import { UsagePage } from './pages/org/UsagePage'
 
+/** `/billing?topup=open` → `/orgs/{personal}/billing?topup=open` */
+function BillingDeepLink() {
+  const { ready, authenticated, user } = usePrivy()
+  const location = useLocation()
+
+  if (!ready) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+        <p style={{ color: 'var(--grafite)', margin: 0 }}>Carregando…</p>
+      </div>
+    )
+  }
+  if (!authenticated || !user) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: `${location.pathname}${location.search}` }}
+      />
+    )
+  }
+  const slug = personalOrgId(user.id)
+  return (
+    <Navigate to={`/orgs/${slug}/billing${location.search}`} replace />
+  )
+}
+
 export default function PortalApp() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<LoginPage initialMode="signup" />} />
       <Route path="/device" element={<DeviceApprovePage />} />
+      <Route path="/billing" element={<BillingDeepLink />} />
 
       <Route
         path="/orgs/:orgId"
