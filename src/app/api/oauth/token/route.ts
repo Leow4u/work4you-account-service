@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { newOpaqueToken, sha256, signAccessToken } from '@/lib/crypto'
+import { buildPaidServiceAccess } from '@/lib/account-entitlement'
+import { getTier } from '@/lib/tiers'
 
 export const runtime = 'nodejs'
 
@@ -14,6 +16,17 @@ function oauthError(error: string, description?: string, status = 400) {
     { error, error_description: description || error },
     { status },
   )
+}
+
+async function entitlementClaims(orgId: string) {
+  const org = await prisma.org.findUnique({ where: { id: orgId } })
+  if (!org) return { paidAccess: false, subscriptionTier: 0 }
+  const access = buildPaidServiceAccess(org)
+  const tier = getTier(org.subscriptionTierId || 'free')
+  return {
+    paidAccess: access.allowed,
+    subscriptionTier: tier.tierOrder,
+  }
 }
 
 /**
@@ -83,12 +96,15 @@ async function deviceCodeGrant(form: FormData, clientId: string) {
     },
   })
 
+  const ent = await entitlementClaims(row.orgId)
   const { token, expiresIn, jti } = await signAccessToken({
     sub: user.privyDid,
     clientId: row.clientId,
     scope: row.scope,
     orgId: row.orgId,
     sessionId: session.id,
+    paidAccess: ent.paidAccess,
+    subscriptionTier: ent.subscriptionTier,
   })
 
   await prisma.oAuthSession.update({
@@ -96,7 +112,6 @@ async function deviceCodeGrant(form: FormData, clientId: string) {
     data: { accessJti: jti },
   })
 
-  // One-time device code
   await prisma.deviceCode.update({
     where: { id: row.id },
     data: { status: 'expired' },
@@ -128,6 +143,7 @@ async function refreshGrant(refreshToken: string, clientId: string) {
     return oauthError('invalid_grant', 'Refresh token expired')
   }
 
+  const ent = await entitlementClaims(session.orgId)
   const newRefresh = newOpaqueToken(48)
   const { token, expiresIn, jti } = await signAccessToken({
     sub: session.user.privyDid,
@@ -135,6 +151,8 @@ async function refreshGrant(refreshToken: string, clientId: string) {
     scope: session.scope,
     orgId: session.orgId,
     sessionId: session.id,
+    paidAccess: ent.paidAccess,
+    subscriptionTier: ent.subscriptionTier,
   })
 
   await prisma.oAuthSession.update({

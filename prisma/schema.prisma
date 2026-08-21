@@ -29,6 +29,7 @@ model Org {
   sessions  OAuthSession[]
   deviceCodes DeviceCode[]
   charges   BillingCharge[]
+  debits    BillingDebit[]
 
   /// Top-up / purchased credit balance (decimal STRING, never float).
   balanceUsd String @default("0")
@@ -57,6 +58,22 @@ model Org {
   autoReloadAmountUsd    String?
   monthlyCapUsd   String?
   monthlySpentUsd String  @default("0")
+}
+
+/// Inference / metered spend (subscription credits first, then purchased).
+model BillingDebit {
+  id                    String   @id @default(cuid())
+  orgId                 String
+  org                   Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  amountUsd             String
+  subscriptionTakenUsd  String
+  purchasedTakenUsd     String
+  idempotencyKey        String
+  purpose               String?
+  createdAt             DateTime @default(now())
+
+  @@unique([orgId, idempotencyKey])
+  @@index([orgId, createdAt])
 }
 
 model OrgMember {

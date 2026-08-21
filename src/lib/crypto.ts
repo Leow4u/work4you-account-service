@@ -65,6 +65,9 @@ export async function signAccessToken(params: {
   orgId: string
   sessionId: string
   expiresInSec?: number
+  /** Fork JWT entitlement snapshot (UX gate; API remains authoritative). */
+  paidAccess?: boolean
+  subscriptionTier?: number
 }): Promise<{ token: string; expiresIn: number; jti: string }> {
   const expiresIn = params.expiresInSec ?? 15 * 60
   const jti = newOpaqueToken(16)
@@ -72,12 +75,20 @@ export async function signAccessToken(params: {
   const jwk = await exportJWK(await publicKey())
   const kid = await calculateJwkThumbprint(jwk)
 
-  const token = await new SignJWT({
+  const claims: Record<string, unknown> = {
     scope: params.scope,
     client_id: params.clientId,
     org_id: params.orgId,
     session_id: params.sessionId,
-  })
+  }
+  if (typeof params.paidAccess === 'boolean') {
+    claims.paid_access = params.paidAccess
+  }
+  if (typeof params.subscriptionTier === 'number') {
+    claims.subscription_tier = params.subscriptionTier
+  }
+
+  const token = await new SignJWT(claims)
     .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
     .setIssuer(ISSUER())
     .setAudience(params.clientId)

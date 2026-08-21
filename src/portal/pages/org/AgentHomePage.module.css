@@ -111,3 +111,31 @@
   font-weight: 600;
   color: var(--grafite);
 }
+
+.flash {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  background: rgba(228, 230, 221, 0.7);
+  color: var(--tinta);
+  font-size: 0.875rem;
+}
+
+.remoteCopy {
+  margin: 0 0 0.85rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--grafite);
+}
+
+.remoteCopy code {
+  font-size: 0.8em;
+}
+
+.remoteRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
