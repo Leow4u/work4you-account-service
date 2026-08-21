@@ -73,6 +73,26 @@
   color: var(--grafite);
 }
 
+.buyBtn {
+  margin-top: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--oliva);
+  color: #fafaf6;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.buyBtn:hover {
+  background: var(--oliva-esc);
+}
+
 .nav {
   display: flex;
   flex-direction: column;

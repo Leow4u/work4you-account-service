@@ -1,11 +1,11 @@
 import type { Actor } from './auth'
 import { canChangePlan } from './auth'
 import type { BillingStatePayload } from './billing-client'
+import { getTier, totalSpendable, TIER_CATALOG } from './tiers'
 
 export type { BillingStatePayload } from './billing-client'
 export { formatUsdDisplay } from './billing-client'
 
-/** Default charge presets (USD decimal strings) — matches CLI fixtures. */
 export const DEFAULT_CHARGE_PRESETS = ['10', '25', '50'] as const
 export const DEFAULT_BOUNDS = { minUsd: '5', maxUsd: '500' } as const
 export const DEFAULT_MONTHLY_CAP_USD = '500'
@@ -32,6 +32,11 @@ export function buildBillingState(actor: Actor): BillingStatePayload {
 
   const isDefaultCeiling = !org.monthlyCapUsd
   const limitUsd = org.monthlyCapUsd || DEFAULT_MONTHLY_CAP_USD
+  const purchased = org.balanceUsd || '0'
+  const subscription = org.subscriptionCreditsUsd || '0'
+  const spent = org.spentThisPeriodUsd || '0'
+  const total = totalSpendable(subscription, purchased)
+  const tier = getTier(org.subscriptionTierId || 'free')
 
   return {
     org: {
@@ -40,7 +45,14 @@ export function buildBillingState(actor: Actor): BillingStatePayload {
       name: org.name,
       role,
     },
-    balanceUsd: org.balanceUsd || '0',
+    balanceUsd: total,
+    purchasedCreditsUsd: purchased,
+    subscriptionCreditsUsd: subscription,
+    spentThisPeriodUsd: spent,
+    lastTopupAt: org.lastTopupAt?.toISOString() ?? null,
+    cycleEndsAt: org.cycleEndsAt?.toISOString() ?? null,
+    planName: org.subscriptionTierName || tier.name,
+    subscriptionTierId: org.subscriptionTierId || 'free',
     cliBillingEnabled: org.cliBillingEnabled,
     canChangePlan: canChangePlan(actor),
     chargePresets: [...DEFAULT_CHARGE_PRESETS],
@@ -59,5 +71,41 @@ export function buildBillingState(actor: Actor): BillingStatePayload {
       card: { kind: hasCard && org.autoReloadEnabled ? 'canonical' : 'none' },
     },
     portalUrl: `/orgs/${encodeURIComponent(org.slug)}/billing?topup=open`,
+  }
+}
+
+export function buildSubscriptionState(actor: Actor) {
+  const { org, role } = actor
+  const tierId = (org.subscriptionTierId || 'free') as string
+  const currentTier = getTier(tierId)
+  const current = {
+    tierId: currentTier.tierId,
+    tierName: org.subscriptionTierName || currentTier.name,
+    monthlyCredits: currentTier.monthlyCredits,
+    creditsRemaining: org.subscriptionCreditsUsd || '0',
+    cycleEndsAt: org.cycleEndsAt?.toISOString() ?? null,
+    pendingDowngradeTierName: null as string | null,
+    pendingDowngradeAt: null as string | null,
+    cancelAtPeriodEnd: false,
+    cancellationEffectiveAt: null as string | null,
+  }
+
+  return {
+    orgName: org.name,
+    orgId: org.id,
+    role,
+    canChangePlan: canChangePlan(actor),
+    context: org.personal ? 'personal' : 'team',
+    current,
+    tiers: TIER_CATALOG.filter((t) => t.tierId !== 'free').map((t) => ({
+      tierId: t.tierId,
+      name: t.name,
+      tierOrder: t.tierOrder,
+      dollarsPerMonthDisplay: t.dollarsPerMonth,
+      monthlyCredits: t.monthlyCredits,
+      isCurrent: t.tierId === tierId,
+      isEnabled: true,
+    })),
+    portalUrl: `/orgs/${encodeURIComponent(org.slug)}/billing`,
   }
 }

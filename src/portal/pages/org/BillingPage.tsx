@@ -2,11 +2,13 @@
 
 import { usePrivy } from '@privy-io/react-auth'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { OrgPage } from '../../components/OrgPage'
 import {
+  formatCycleDate,
   formatUsdDisplay,
   type BillingStatePayload,
+  type SubscriptionStatePayload,
 } from '@/lib/billing-client'
 import styles from './BillingPage.module.css'
 
@@ -14,43 +16,53 @@ export function BillingPage() {
   const { getAccessToken, authenticated, ready } = usePrivy()
   const [searchParams, setSearchParams] = useSearchParams()
   const topupOpen = searchParams.get('topup') === 'open'
+  const manageOpen = searchParams.get('manage') === '1'
+  const cardSaved = searchParams.get('card') === 'saved'
 
-  const [state, setState] = useState<BillingStatePayload | null>(null)
+  const [billing, setBilling] = useState<BillingStatePayload | null>(null)
+  const [subscription, setSubscription] =
+    useState<SubscriptionStatePayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
-  const [panelOpen, setPanelOpen] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
+
+  const authHeaders = useCallback(async () => {
+    const token = await getAccessToken()
+    if (!token) return null
+    return { Authorization: `Bearer ${token}` }
+  }, [getAccessToken])
 
   const load = useCallback(async () => {
     if (!authenticated) {
-      setState(null)
+      setBilling(null)
+      setSubscription(null)
       setLoading(false)
       return
     }
     setLoading(true)
     try {
-      const token = await getAccessToken()
-      if (!token) {
-        setState(null)
-        return
-      }
-      const res = await fetch('/api/billing/state', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) {
-        setState(null)
-        return
-      }
-      const data = (await res.json()) as BillingStatePayload
-      setState(data)
-      if (data.chargePresets?.length) {
-        setSelectedPreset(data.chargePresets[0])
-      }
+      const headers = await authHeaders()
+      if (!headers) return
+      const [bRes, sRes] = await Promise.all([
+        fetch('/api/billing/state', { headers }),
+        fetch('/api/billing/subscription', { headers }),
+      ])
+      if (bRes.ok) {
+        const data = (await bRes.json()) as BillingStatePayload
+        setBilling(data)
+        if (data.chargePresets?.length) setSelectedPreset(data.chargePresets[0])
+      } else setBilling(null)
+      if (sRes.ok) {
+        setSubscription((await sRes.json()) as SubscriptionStatePayload)
+      } else setSubscription(null)
     } catch {
-      setState(null)
+      setBilling(null)
+      setSubscription(null)
     } finally {
       setLoading(false)
     }
-  }, [authenticated, getAccessToken])
+  }, [authenticated, authHeaders])
 
   useEffect(() => {
     if (!ready) return
@@ -58,117 +70,414 @@ export function BillingPage() {
   }, [ready, load])
 
   useEffect(() => {
-    if (topupOpen) setPanelOpen(true)
-  }, [topupOpen])
+    if (cardSaved) {
+      setFlash('Cartão guardado')
+      const next = new URLSearchParams(searchParams)
+      next.delete('card')
+      setSearchParams(next, { replace: true })
+      void load()
+    }
+  }, [cardSaved, load, searchParams, setSearchParams])
 
-  function openTopup() {
-    setPanelOpen(true)
+  function setQuery(key: string, value: string | null) {
     const next = new URLSearchParams(searchParams)
-    next.set('topup', 'open')
+    if (value == null) next.delete(key)
+    else next.set(key, value)
     setSearchParams(next, { replace: true })
   }
 
-  function closeTopup() {
-    setPanelOpen(false)
-    const next = new URLSearchParams(searchParams)
-    next.delete('topup')
-    setSearchParams(next, { replace: true })
+  async function addCard() {
+    setBusy('card')
+    setFlash(null)
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const res = await fetch('/api/billing/payment-method/setup', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = (await res.json()) as { url?: string; error?: string }
+      if (data.url) {
+        window.location.href = data.url
+        return
+      }
+      setFlash(data.error || 'Falha ao abrir Stripe')
+    } finally {
+      setBusy(null)
+    }
   }
 
-  const balanceLabel = useMemo(() => {
-    if (!state) return '—'
-    return formatUsdDisplay(state.balanceUsd)
-  }, [state])
+  async function confirmTopup() {
+    if (!selectedPreset || !billing?.card) return
+    setBusy('charge')
+    setFlash(null)
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const key = crypto.randomUUID()
+      const res = await fetch('/api/billing/charge', {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': key,
+        },
+        body: JSON.stringify({ amountUsd: Number(selectedPreset) }),
+      })
+      const data = (await res.json()) as {
+        chargeId?: string
+        error?: string
+        portalUrl?: string
+      }
+      if (!res.ok || !data.chargeId) {
+        if (data.error === 'no_payment_method') {
+          setFlash('Adiciona um cartão primeiro')
+          return
+        }
+        setFlash(data.error || 'Cobrança falhou')
+        return
+      }
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 800))
+        const st = await fetch(`/api/billing/charge/${data.chargeId}`, {
+          headers,
+        })
+        const body = (await st.json()) as {
+          status?: string
+          reason?: string
+        }
+        if (body.status === 'settled') {
+          setFlash(`+${formatUsdDisplay(selectedPreset)}`)
+          setQuery('topup', null)
+          await load()
+          return
+        }
+        if (body.status === 'failed') {
+          setFlash(body.reason || 'Cobrança falhou')
+          return
+        }
+      }
+      setFlash('A processar')
+      await load()
+    } finally {
+      setBusy(null)
+    }
+  }
 
-  const cardLabel = useMemo(() => {
-    if (!state?.card) return 'Sem cartão'
-    return `${state.card.brand} ···· ${state.card.last4}`
-  }, [state])
+  async function toggleAutoReload() {
+    if (!billing) return
+    setBusy('auto')
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const enabling = !billing.autoReload.enabled
+      const res = await fetch('/api/billing/auto-top-up', {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          enabling
+            ? { enabled: true, threshold: 5, topUpAmount: 25 }
+            : { enabled: false, threshold: 0, topUpAmount: 0 },
+        ),
+      })
+      if (res.ok) await load()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const lowBalance = useMemo(() => {
+    if (!billing) return false
+    return Number(billing.balanceUsd) < 5
+  }, [billing])
+
+  const cycleLabel = formatCycleDate(billing?.cycleEndsAt ?? null)
+  const total = Number(billing?.balanceUsd || 0)
+  const spent = Number(billing?.spentThisPeriodUsd || 0)
+  const barTotal = Math.max(total + spent, 0.01)
+  const fillPct = Math.min(100, Math.round((total / barTotal) * 100))
 
   return (
     <div className={styles.wrap}>
       <OrgPage eyebrow="Billing" title="Billing">
-        <section className={styles.panel} aria-labelledby="saldo-heading">
-          <h2 id="saldo-heading" className={styles.panelTitle}>
-            Saldo
-          </h2>
-          <p className={styles.balance}>{loading ? '…' : balanceLabel}</p>
-          <dl className={styles.meta}>
-            <div>
-              <dt>Cartão</dt>
-              <dd>{loading ? '…' : cardLabel}</dd>
+        {flash ? <p className={styles.flash}>{flash}</p> : null}
+
+        <section className={styles.hero}>
+          <p className={styles.heroBalance}>
+            {loading ? '…' : formatUsdDisplay(billing?.balanceUsd || '0')}
+          </p>
+          {lowBalance && !loading ? (
+            <p className={styles.low}>Saldo baixo</p>
+          ) : null}
+        </section>
+
+        <section className={styles.card} aria-labelledby="breakdown-title">
+          <div className={styles.cardHead}>
+            <h2 id="breakdown-title" className={styles.cardTitle}>
+              Detalhe do saldo
+            </h2>
+            <span className={styles.cycle}>Ciclo até {cycleLabel}</span>
+          </div>
+
+          <div className={styles.barTrack} aria-hidden>
+            <div className={styles.barFill} style={{ width: `${fillPct}%` }} />
+            {spent > 0 ? (
+              <span className={styles.barSpent}>
+                −{formatUsdDisplay(String(spent))}
+              </span>
+            ) : null}
+          </div>
+
+          <ul className={styles.rows}>
+            <li>
+              <span className={`${styles.dot} ${styles.dotGreen}`} />
+              <div className={styles.rowMain}>
+                <strong>Créditos avulsos</strong>
+                <span className={styles.rowMeta}>
+                  {billing?.lastTopupAt
+                    ? `Última compra: ${formatCycleDate(billing.lastTopupAt)}`
+                    : 'Sem compras'}
+                </span>
+              </div>
+              <div className={styles.rowRight}>
+                <strong>
+                  {formatUsdDisplay(billing?.purchasedCreditsUsd || '0')}
+                </strong>
+                <span className={styles.rowMeta}>Não expiram</span>
+              </div>
+            </li>
+            <li>
+              <span className={`${styles.dot} ${styles.dotBlue}`} />
+              <div className={styles.rowMain}>
+                <strong>Créditos da subscrição</strong>
+                <span className={styles.rowMeta}>
+                  {formatUsdDisplay(
+                    subscription?.current.monthlyCredits ||
+                      billing?.subscriptionCreditsUsd ||
+                      '0',
+                  )}{' '}
+                  neste período
+                </span>
+              </div>
+              <div className={styles.rowRight}>
+                <strong>
+                  {formatUsdDisplay(billing?.subscriptionCreditsUsd || '0')}
+                </strong>
+                <span className={styles.rowMeta}>Até {cycleLabel}</span>
+              </div>
+            </li>
+            <li>
+              <span className={`${styles.dot} ${styles.dotDashed}`} />
+              <div className={styles.rowMain}>
+                <strong>Gasto neste período</strong>
+                <Link className={styles.usageLink} to="../usage">
+                  Uso detalhado
+                </Link>
+              </div>
+              <div className={styles.rowRight}>
+                <strong>
+                  {formatUsdDisplay(billing?.spentThisPeriodUsd || '0')}
+                </strong>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <div className={styles.grid2}>
+          <section className={styles.card} aria-labelledby="pm-title">
+            <h2 id="pm-title" className={styles.cardTitle}>
+              Método de pagamento
+            </h2>
+            {billing?.card ? (
+              <div className={styles.pmRow}>
+                <span>
+                  {billing.card.brand} ···· {billing.card.last4}
+                </span>
+                <button
+                  type="button"
+                  className={styles.ghost}
+                  disabled={busy === 'card'}
+                  onClick={() => void addCard()}
+                >
+                  Atualizar
+                </button>
+              </div>
+            ) : (
+              <div className={styles.pmRow}>
+                <span className={styles.muted}>Sem cartão</span>
+                <button
+                  type="button"
+                  className={styles.primary}
+                  disabled={busy === 'card' || !billing?.canChangePlan}
+                  onClick={() => void addCard()}
+                >
+                  {busy === 'card' ? '…' : 'Adicionar'}
+                </button>
+              </div>
+            )}
+          </section>
+
+          <section className={styles.card} aria-labelledby="sub-title">
+            <h2 id="sub-title" className={styles.cardTitle}>
+              Subscrição
+            </h2>
+            <div className={styles.planRow}>
+              <div>
+                <p className={styles.planName}>
+                  {subscription?.current.tierName || billing?.planName || 'Free'}
+                </p>
+                <p className={styles.rowMeta}>
+                  {formatUsdDisplay(
+                    subscription?.tiers.find((t) => t.isCurrent)
+                      ?.dollarsPerMonthDisplay ||
+                      (billing?.subscriptionTierId === 'free' ? '0' : '0'),
+                  )}
+                  /mês ·{' '}
+                  {formatUsdDisplay(
+                    subscription?.current.monthlyCredits || '0.10',
+                  )}{' '}
+                  créditos
+                </p>
+                <p className={styles.rowMeta}>Renova {cycleLabel}</p>
+              </div>
+              <button
+                type="button"
+                className={styles.ghost}
+                disabled={!billing?.canChangePlan}
+                onClick={() => setQuery('manage', manageOpen ? null : '1')}
+              >
+                Gerir plano
+              </button>
             </div>
-            <div>
-              <dt>Gasto remoto (CLI)</dt>
-              <dd>
-                {loading
-                  ? '…'
-                  : state?.cliBillingEnabled
-                    ? 'Ativo'
-                    : 'Desligado'}
-              </dd>
-            </div>
-            <div>
-              <dt>Limite mensal</dt>
-              <dd>
-                {loading || !state
-                  ? '…'
-                  : `${formatUsdDisplay(state.monthlyCap.spentThisMonthUsd)} / ${formatUsdDisplay(state.monthlyCap.limitUsd)}`}
-              </dd>
-            </div>
-            <div>
-              <dt>Recarga automática</dt>
-              <dd>
-                {loading
-                  ? '…'
-                  : state?.autoReload.enabled
-                    ? `Ativa · ${formatUsdDisplay(state.autoReload.thresholdUsd || '0')} → ${formatUsdDisplay(state.autoReload.reloadToUsd || '0')}`
-                    : 'Desligada'}
-              </dd>
-            </div>
-          </dl>
+          </section>
+        </div>
+
+        <section className={styles.card} aria-labelledby="topup-title">
+          <div className={styles.cardHead}>
+            <h2 id="topup-title" className={styles.cardTitle}>
+              Créditos avulsos
+            </h2>
+          </div>
           <div className={styles.actions}>
             <button
               type="button"
               className={styles.primary}
-              disabled={loading || !state?.canChangePlan}
-              onClick={openTopup}
+              disabled={!billing?.canChangePlan}
+              onClick={() => setQuery('topup', topupOpen ? null : 'open')}
             >
-              Comprar créditos
+              Recarregar agora
+            </button>
+          </div>
+
+          {topupOpen ? (
+            <div className={styles.topupPanel}>
+              <div className={styles.presets} role="group" aria-label="Valores">
+                {(billing?.chargePresets || []).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={
+                      selectedPreset === p ? styles.presetActive : styles.preset
+                    }
+                    onClick={() => setSelectedPreset(p)}
+                  >
+                    {formatUsdDisplay(p)}
+                  </button>
+                ))}
+              </div>
+              {!billing?.card ? (
+                <button
+                  type="button"
+                  className={styles.primary}
+                  disabled={busy === 'card'}
+                  onClick={() => void addCard()}
+                >
+                  Adicionar cartão
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.primary}
+                  disabled={busy === 'charge' || !selectedPreset}
+                  onClick={() => void confirmTopup()}
+                >
+                  {busy === 'charge'
+                    ? '…'
+                    : `Confirmar ${selectedPreset ? formatUsdDisplay(selectedPreset) : ''}`}
+                </button>
+              )}
+            </div>
+          ) : null}
+
+          <div className={styles.autoBlock}>
+            <div>
+              <strong>Recarga automática</strong>
+              <p className={styles.rowMeta}>
+                {billing?.autoReload.enabled
+                  ? `${formatUsdDisplay(billing.autoReload.thresholdUsd || '0')} → ${formatUsdDisplay(billing.autoReload.reloadToUsd || '0')}`
+                  : 'Desligada'}
+              </p>
+            </div>
+            <button
+              type="button"
+              className={styles.ghost}
+              disabled={!billing?.card || !billing?.canChangePlan || busy === 'auto'}
+              onClick={() => void toggleAutoReload()}
+            >
+              {billing?.autoReload.enabled ? 'Desligar' : 'Ativar'}
             </button>
           </div>
         </section>
 
-        {panelOpen ? (
-          <section className={styles.topup} aria-labelledby="topup-heading">
-            <div className={styles.topupHead}>
-              <h2 id="topup-heading" className={styles.panelTitle}>
-                Comprar créditos
+        {manageOpen && subscription ? (
+          <section className={styles.card} aria-labelledby="manage-title">
+            <div className={styles.cardHead}>
+              <h2 id="manage-title" className={styles.cardTitle}>
+                Gerir plano
               </h2>
-              <button type="button" className={styles.close} onClick={closeTopup}>
+              <button
+                type="button"
+                className={styles.close}
+                onClick={() => setQuery('manage', null)}
+              >
                 Fechar
               </button>
             </div>
-            <div className={styles.presets} role="group" aria-label="Valores">
-              {(state?.chargePresets || []).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={
-                    selectedPreset === p ? styles.presetActive : styles.preset
-                  }
-                  onClick={() => setSelectedPreset(p)}
-                >
-                  {formatUsdDisplay(p)}
-                </button>
+            <p className={styles.rowMeta}>
+              Pagamento: Stripe
+              {billing?.card
+                ? ` · ${billing.card.brand} ···· ${billing.card.last4}`
+                : ''}
+            </p>
+            <ul className={styles.tierList}>
+              {subscription.tiers.map((t) => (
+                <li key={t.tierId}>
+                  <div>
+                    <strong>
+                      {t.name} ({formatUsdDisplay(t.dollarsPerMonthDisplay)}/mês)
+                    </strong>
+                    <span className={styles.bonus}>
+                      {formatUsdDisplay(t.monthlyCredits)} créditos mensais
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.primary}
+                    disabled={t.isCurrent || !billing?.card}
+                    onClick={() =>
+                      setFlash(
+                        !billing?.card
+                          ? 'Adiciona um cartão primeiro'
+                          : 'Upgrade com Checkout em breve',
+                      )
+                    }
+                  >
+                    {t.isCurrent ? 'Atual' : 'Upgrade'}
+                  </button>
+                </li>
               ))}
-            </div>
-            <div className={styles.actions}>
-              <button type="button" className={styles.primary} disabled>
-                Confirmar
-                {selectedPreset ? ` ${formatUsdDisplay(selectedPreset)}` : ''}
-              </button>
-            </div>
+            </ul>
           </section>
         ) : null}
       </OrgPage>

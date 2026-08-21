@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveActor } from '@/lib/auth'
 import { buildBillingState } from '@/lib/billing'
+import { syncCardFromCustomer } from '@/lib/stripe-customer'
 
 export const runtime = 'nodejs'
 
 /**
  * GET /api/billing/state
  * Auth: Bearer Privy (Portal) OR Work4You OAuth JWT (CLI).
- * No billing:manage scope required (read overview).
  */
 export async function GET(req: NextRequest) {
   const actor = await resolveActor(req.headers.get('authorization'))
@@ -16,6 +16,17 @@ export async function GET(req: NextRequest) {
       { error: 'invalid_token', message: 'Unauthorized' },
       { status: 401 },
     )
+  }
+
+  // Refresh card brand/last4 from Stripe when we have a customer.
+  if (actor.org.stripeCustomerId) {
+    try {
+      await syncCardFromCustomer(actor.org.id, actor.org.stripeCustomerId)
+      const refreshed = await resolveActor(req.headers.get('authorization'))
+      if (refreshed) return NextResponse.json(buildBillingState(refreshed))
+    } catch {
+      // Keep DB snapshot if Stripe is briefly unavailable.
+    }
   }
 
   return NextResponse.json(buildBillingState(actor))

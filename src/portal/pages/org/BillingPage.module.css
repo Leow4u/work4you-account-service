@@ -1,30 +1,24 @@
 .wrap {
-  max-width: 40rem;
+  max-width: 52rem;
 }
 
-.panel,
-.topup {
-  padding: 1.15rem 1.2rem;
-  border: 1px solid var(--linha);
-  border-radius: 8px;
-  background: rgba(250, 250, 246, 0.85);
+.flash {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  background: rgba(77, 89, 67, 0.12);
+  color: var(--oliva-esc);
+  font-size: 0.875rem;
+  font-weight: 700;
 }
 
-.topup {
-  margin-top: 0.25rem;
+.hero {
+  margin-bottom: 0.25rem;
 }
 
-.panelTitle {
-  margin: 0 0 0.65rem;
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--tinta);
-}
-
-.balance {
-  margin: 0 0 1rem;
-  font-size: clamp(2rem, 4vw, 2.6rem);
+.heroBalance {
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 3.25rem);
   font-weight: 800;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -32,33 +26,174 @@
   font-variant-numeric: tabular-nums;
 }
 
-.meta {
-  display: grid;
-  gap: 0.65rem;
-  margin: 0 0 1rem;
+.low {
+  margin: 0.65rem 0 0;
+  display: inline-block;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  background: rgba(180, 120, 40, 0.14);
+  color: #7a4e10;
+  font-size: 0.8125rem;
+  font-weight: 700;
 }
 
-.meta div {
-  display: grid;
-  grid-template-columns: 11rem 1fr;
-  gap: 0.5rem;
+.card {
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.cardHead {
+  display: flex;
   align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
 }
 
-.meta dt {
+.cardTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--tinta);
+}
+
+.cycle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--oliva);
+}
+
+.barTrack {
+  position: relative;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--nevoa);
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--oliva);
+}
+
+.barSpent {
+  position: absolute;
+  right: 0.35rem;
+  top: -1.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--grafite);
+  font-variant-numeric: tabular-nums;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.rows li {
+  display: grid;
+  grid-template-columns: 0.75rem 1fr auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  margin-top: 0.35rem;
+}
+
+.dotGreen {
+  background: #3f7d4e;
+}
+
+.dotBlue {
+  background: #3a6ea5;
+}
+
+.dotDashed {
+  border: 1.5px dashed var(--grafite);
+  background: transparent;
+}
+
+.rowMain {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.rowMain strong,
+.rowRight strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.rowRight {
+  text-align: right;
+  display: grid;
+  gap: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rowMeta {
   margin: 0;
   font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--grafite);
+  font-weight: 500;
 }
 
-.meta dd {
-  margin: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
+.usageLink {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--oliva);
+}
+
+.usageLink:hover {
+  color: var(--oliva-esc);
+  text-decoration: underline;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pmRow,
+.planRow,
+.autoBlock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.planName {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 800;
   color: var(--tinta);
+}
+
+.muted {
+  color: var(--grafite);
+  font-weight: 600;
 }
 
 .actions {
@@ -67,64 +202,61 @@
   gap: 0.65rem;
 }
 
-.primary {
+.primary,
+.ghost,
+.close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.4rem;
-  padding: 0.45rem 1rem;
-  border: none;
+  min-height: 2.35rem;
+  padding: 0.4rem 0.95rem;
   border-radius: 6px;
-  background: var(--oliva);
-  color: #fafaf6;
   font-size: 0.875rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--oliva);
+  color: #fafaf6;
 }
 
 .primary:hover:not(:disabled) {
   background: var(--oliva-esc);
 }
 
-.primary:disabled {
+.primary:disabled,
+.ghost:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.topupHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.35rem;
-}
-
-.topupHead .panelTitle {
-  margin: 0;
-}
-
+.ghost,
 .close {
   border: 1px solid var(--linha);
-  border-radius: 6px;
   background: transparent;
-  min-height: 2rem;
-  padding: 0.3rem 0.75rem;
-  font-size: 0.8125rem;
-  font-weight: 700;
   color: var(--tinta);
-  cursor: pointer;
 }
 
+.ghost:hover:not(:disabled),
 .close:hover {
   border-color: var(--oliva);
   color: var(--oliva-esc);
+}
+
+.topupPanel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--linha);
+  display: grid;
+  gap: 0.85rem;
 }
 
 .presets {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin: 0.85rem 0 1rem;
 }
 
 .preset,
@@ -141,7 +273,7 @@
 
 .preset {
   border: 1px solid var(--linha);
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.8);
   color: var(--tinta);
 }
 
@@ -153,4 +285,37 @@
   border: 1px solid var(--oliva);
   background: rgba(77, 89, 67, 0.12);
   color: var(--oliva-esc);
+}
+
+.autoBlock {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--linha);
+}
+
+.tierList {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.tierList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: rgba(250, 250, 246, 0.7);
+}
+
+.bonus {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--oliva);
 }

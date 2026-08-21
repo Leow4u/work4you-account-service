@@ -28,20 +28,28 @@ model Org {
   members   OrgMember[]
   sessions  OAuthSession[]
   deviceCodes DeviceCode[]
+  charges   BillingCharge[]
 
-  /// Purchased credit balance as a decimal STRING (never float).
+  /// Top-up / purchased credit balance (decimal STRING, never float).
   balanceUsd String @default("0")
-  /// Per-org kill-switch for CLI Remote Spending.
-  cliBillingEnabled Boolean @default(true)
-  stripeCustomerId  String?
-  stripeDefaultPmId String?
-  cardBrand         String?
-  cardLast4         String?
-  autoReloadEnabled Boolean @default(false)
-  /// Decimal strings when auto-reload is configured.
+  /// Free monthly allowance remaining (decimal STRING).
+  subscriptionCreditsUsd String @default("0.10")
+  /// Spent this billing period (decimal STRING).
+  spentThisPeriodUsd String @default("0")
+  /// free | plus | super | ultra
+  subscriptionTierId   String    @default("free")
+  subscriptionTierName String    @default("Free")
+  cycleEndsAt         DateTime?
+  lastTopupAt         DateTime?
+  cliBillingEnabled   Boolean @default(true)
+  stripeCustomerId    String?
+  stripeDefaultPmId   String?
+  stripeSubscriptionId String?
+  cardBrand           String?
+  cardLast4           String?
+  autoReloadEnabled   Boolean @default(false)
   autoReloadThresholdUsd String?
   autoReloadAmountUsd    String?
-  /// Null = use default ceiling on the client; otherwise decimal string.
   monthlyCapUsd   String?
   monthlySpentUsd String  @default("0")
 }
@@ -57,7 +65,6 @@ model OrgMember {
   @@unique([orgId, userId])
 }
 
-/// Pending device authorization (CLI/Desktop login).
 model DeviceCode {
   id              String    @id @default(cuid())
   deviceCodeHash  String    @unique
@@ -67,14 +74,13 @@ model DeviceCode {
   orgId           String?
   org             Org?      @relation(fields: [orgId], references: [id], onDelete: SetNull)
   approvedUserId  String?
-  status          String    @default("pending") // pending | approved | denied | expired
+  status          String    @default("pending")
   expiresAt       DateTime
   intervalSeconds Int       @default(1)
   createdAt       DateTime  @default(now())
   approvedAt      DateTime?
 }
 
-/// Active OAuth login session (row on Work4You Agent Sessions table).
 model OAuthSession {
   id               String    @id @default(cuid())
   orgId            String
@@ -92,4 +98,21 @@ model OAuthSession {
 
   @@index([orgId, revokedAt])
   @@index([userId, revokedAt])
+}
+
+/// One top-up charge (CLI poll contract).
+model BillingCharge {
+  id               String   @id @default(cuid())
+  orgId            String
+  org              Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  amountUsd        String
+  status           String   @default("pending") // pending | settled | failed
+  reason           String?
+  idempotencyKey   String
+  stripePaymentIntentId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([orgId, idempotencyKey])
+  @@index([orgId, status])
 }

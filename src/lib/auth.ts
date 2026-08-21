@@ -1,27 +1,13 @@
+import type { Org, User } from '@prisma/client'
 import { prisma } from './db'
 import { verifyAccessToken } from './crypto'
 import { ensureUserAndOrg, verifyPrivyBearer } from './privy'
+import { ensureBillingDefaults } from './org-billing'
 
 export type Actor = {
-  user: { id: string; privyDid: string; email: string | null }
-  org: {
-    id: string
-    slug: string
-    name: string
-    balanceUsd: string
-    cliBillingEnabled: boolean
-    stripeCustomerId: string | null
-    stripeDefaultPmId: string | null
-    cardBrand: string | null
-    cardLast4: string | null
-    autoReloadEnabled: boolean
-    autoReloadThresholdUsd: string | null
-    autoReloadAmountUsd: string | null
-    monthlyCapUsd: string | null
-    monthlySpentUsd: string
-  }
+  user: Pick<User, 'id' | 'privyDid' | 'email'>
+  org: Org
   role: string
-  /** OAuth scope string when via JWT; null for Privy portal sessions. */
   scope: string | null
   via: 'privy' | 'oauth'
   sessionId: string | null
@@ -33,15 +19,10 @@ function bearerToken(authHeader: string | null): string | null {
   return token || null
 }
 
-/**
- * Resolve the caller from Privy (Portal UI) or Work4You OAuth JWT (CLI/Desktop).
- * Prefer OAuth JWT when both verify — CLI tokens are RS256 and won't verify as Privy.
- */
 export async function resolveActor(authHeader: string | null): Promise<Actor | null> {
   const token = bearerToken(authHeader)
   if (!token) return null
 
-  // Try OAuth JWT first (CLI / Desktop).
   try {
     const { payload } = await verifyAccessToken(token)
     const sub = typeof payload.sub === 'string' ? payload.sub : null
@@ -71,12 +52,13 @@ export async function resolveActor(authHeader: string | null): Promise<Actor | n
 
     const user = await prisma.user.findUnique({ where: { privyDid: sub } })
     if (!user) return null
-    const org = await prisma.org.findUnique({ where: { id: orgId } })
+    let org = await prisma.org.findUnique({ where: { id: orgId } })
     if (!org) return null
     const member = await prisma.orgMember.findUnique({
       where: { orgId_userId: { orgId: org.id, userId: user.id } },
     })
     if (!member) return null
+    org = await ensureBillingDefaults(org.id)
 
     return {
       user: { id: user.id, privyDid: user.privyDid, email: user.email },
@@ -87,23 +69,21 @@ export async function resolveActor(authHeader: string | null): Promise<Actor | n
       sessionId,
     }
   } catch {
-    // Not our JWT — fall through to Privy.
+    // fall through to Privy
   }
 
   const claims = await verifyPrivyBearer(authHeader)
   if (!claims?.userId) return null
-  const { user, org } = await ensureUserAndOrg(claims.userId)
+  const { user, org: baseOrg } = await ensureUserAndOrg(claims.userId)
   const member = await prisma.orgMember.findUnique({
-    where: { orgId_userId: { orgId: org.id, userId: user.id } },
+    where: { orgId_userId: { orgId: baseOrg.id, userId: user.id } },
   })
   if (!member) return null
-
-  // Re-fetch org so billing columns are present after schema push.
-  const fullOrg = await prisma.org.findUniqueOrThrow({ where: { id: org.id } })
+  const org = await ensureBillingDefaults(baseOrg.id)
 
   return {
     user: { id: user.id, privyDid: user.privyDid, email: user.email },
-    org: fullOrg,
+    org,
     role: member.role,
     scope: null,
     via: 'privy',
@@ -113,7 +93,6 @@ export async function resolveActor(authHeader: string | null): Promise<Actor | n
 
 export function hasBillingManageScope(actor: Actor): boolean {
   if (actor.via === 'privy') {
-    // Portal UI is already the account owner surface.
     return ['OWNER', 'ADMIN', 'FINANCE_ADMIN'].includes(actor.role.toUpperCase())
   }
   return (actor.scope || '').split(/\s+/).includes('billing:manage')

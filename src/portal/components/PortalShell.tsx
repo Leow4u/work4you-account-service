@@ -1,13 +1,42 @@
+'use client'
+
 import { usePrivy } from '@privy-io/react-auth'
-import { NavLink, Outlet, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
+import { formatUsdDisplay } from '@/lib/billing-client'
 import { displayName } from '../lib/auth-display'
 import { PORTAL_NAV, navPath } from '../lib/portal-nav'
 import styles from './PortalShell.module.css'
 
 export function PortalShell() {
   const { orgId = '' } = useParams()
-  const { user, logout } = usePrivy()
+  const { user, logout, getAccessToken, authenticated } = usePrivy()
+  const navigate = useNavigate()
   const name = user ? displayName(user) : 'Conta'
+  const [balance, setBalance] = useState<string | null>(null)
+
+  const loadBalance = useCallback(async () => {
+    if (!authenticated) {
+      setBalance(null)
+      return
+    }
+    try {
+      const token = await getAccessToken()
+      if (!token) return
+      const res = await fetch('/api/billing/state', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as { balanceUsd?: string }
+      if (typeof data.balanceUsd === 'string') setBalance(data.balanceUsd)
+    } catch {
+      /* keep previous */
+    }
+  }, [authenticated, getAccessToken])
+
+  useEffect(() => {
+    void loadBalance()
+  }, [loadBalance])
 
   return (
     <div className={styles.shell}>
@@ -25,8 +54,16 @@ export function PortalShell() {
 
         <div className={styles.balance} aria-label="Saldo">
           <span className={styles.balanceLabel}>Saldo</span>
-          <span className={styles.balanceValue}>—</span>
-          <span className={styles.balanceHint}>Billing liga com o NAS</span>
+          <span className={styles.balanceValue}>
+            {balance == null ? '…' : formatUsdDisplay(balance)}
+          </span>
+          <button
+            type="button"
+            className={styles.buyBtn}
+            onClick={() => navigate(`/orgs/${orgId}/billing?topup=open`)}
+          >
+            Comprar créditos
+          </button>
         </div>
 
         <nav className={styles.nav} aria-label="Secções">
@@ -60,7 +97,7 @@ export function PortalShell() {
       </aside>
 
       <div className={styles.main}>
-        <Outlet />
+        <Outlet context={{ refreshBalance: loadBalance }} />
       </div>
     </div>
   )
