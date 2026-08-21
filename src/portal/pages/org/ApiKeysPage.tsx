@@ -30,6 +30,42 @@ const CODE_LANGS: { id: CodeLang; label: string }[] = [
   { id: 'kotlin', label: 'Kotlin' },
 ]
 
+/** Prefer stable catalog IDs — OpenRouter often lists experimental first. */
+const PREFERRED_MODELS = [
+  'openai/gpt-4o-mini',
+  'google/gemini-2.5-flash',
+  'anthropic/claude-sonnet-4',
+  'deepseek/deepseek-chat',
+  'deepseek/deepseek-v4-flash',
+] as const
+
+function isNoisyModelId(id: string): boolean {
+  const lower = id.toLowerCase()
+  return (
+    lower.includes('-exp') ||
+    lower.includes('-vision-exp') ||
+    lower.startsWith('~') ||
+    lower.endsWith(':free')
+  )
+}
+
+function sortModelIds(ids: string[]): string[] {
+  const set = new Set(ids)
+  const preferred = PREFERRED_MODELS.filter((id) => set.has(id))
+  const rest = ids
+    .filter((id) => !(PREFERRED_MODELS as readonly string[]).includes(id))
+    .sort((a, b) => a.localeCompare(b))
+  return [...preferred, ...rest]
+}
+
+function pickDefaultModel(ids: string[]): string {
+  for (const pref of PREFERRED_MODELS) {
+    if (ids.includes(pref)) return pref
+  }
+  const stable = ids.find((id) => !isNoisyModelId(id))
+  return stable || ids[0] || 'openai/gpt-4o-mini'
+}
+
 export function ApiKeysPage() {
   const { getAccessToken, authenticated, ready } = usePrivy()
   const [keys, setKeys] = useState<ApiKeyRow[]>([])
@@ -44,7 +80,7 @@ export function ApiKeysPage() {
   // Playground
   const [playMode, setPlayMode] = useState<PlayMode>('chat')
   const [models, setModels] = useState<string[]>([])
-  const [model, setModel] = useState('')
+  const [model, setModel] = useState<string>('openai/gpt-4o-mini')
   const [selectedKeyId, setSelectedKeyId] = useState<string>('')
   const [playgroundSecret, setPlaygroundSecret] = useState('')
   const [maxTokens, setMaxTokens] = useState(1024)
@@ -187,8 +223,11 @@ export function ApiKeysPage() {
           .map((m) => m.id)
           .filter((id): id is string => Boolean(id))
         if (!cancelled && ids.length) {
-          setModels(ids.slice(0, 200))
-          setModel((prev) => prev || ids[0])
+          const sorted = sortModelIds(ids)
+          setModels(sorted)
+          setModel((prev) =>
+            prev && sorted.includes(prev) ? prev : pickDefaultModel(sorted),
+          )
         }
       } catch {
         /* catalog optional until key works */
@@ -298,7 +337,31 @@ export function ApiKeysPage() {
       })
       const text = await res.text()
       try {
-        setResponseText(JSON.stringify(JSON.parse(text), null, 2))
+        const parsed = JSON.parse(text) as {
+          error?: { message?: string; code?: number | string }
+        }
+        const msg = parsed?.error?.message || ''
+        if (
+          typeof msg === 'string' &&
+          msg.includes('guardrail restrictions and data policy')
+        ) {
+          setResponseText(
+            JSON.stringify(
+              {
+                error: {
+                  message:
+                    'Este modelo não está disponível com a política actual do gateway. Escolhe outro (ex.: openai/gpt-4o-mini).',
+                  code: parsed.error?.code ?? 404,
+                  upstream: msg,
+                },
+              },
+              null,
+              2,
+            ),
+          )
+        } else {
+          setResponseText(JSON.stringify(parsed, null, 2))
+        }
       } catch {
         setResponseText(text)
       }
