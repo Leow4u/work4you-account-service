@@ -23,7 +23,7 @@ export type CloudSizeSpec = {
 export const CLOUD_SIZES: Record<CloudSizeId, CloudSizeSpec> = {
   small: {
     id: 'small',
-    label: 'Small',
+    label: 'Pequeno',
     maxSessions: 5,
     memoryMb: 1024,
     cpus: 2,
@@ -34,7 +34,7 @@ export const CLOUD_SIZES: Record<CloudSizeId, CloudSizeSpec> = {
   },
   medium: {
     id: 'medium',
-    label: 'Medium',
+    label: 'Médio',
     maxSessions: 10,
     memoryMb: 2048,
     cpus: 4,
@@ -45,7 +45,7 @@ export const CLOUD_SIZES: Record<CloudSizeId, CloudSizeSpec> = {
   },
   large: {
     id: 'large',
-    label: 'Large',
+    label: 'Grande',
     maxSessions: 20,
     memoryMb: 4096,
     cpus: 8,
