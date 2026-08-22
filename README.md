@@ -37,7 +37,7 @@ Vercel project `work4you-portal`, domínio `portal.work4you.ai`, root `.`
 | `FLY_API_TOKEN` | Token org Fly (Machines API) |
 | `FLY_ORG` | Slug da org (`personal` por omissão) |
 | `FLY_REGION` | Região das VMs (`gru` por omissão) |
-| `WORK4YOU_AGENT_IMAGE` | Imagem das VMs (default: `registry.fly.io/work4you-cloud-runtime:…`) |
+| `WORK4YOU_AGENT_IMAGE` | **Opcional.** Só definir após `fly deploy` com a tag exacta. Se omitida, o código usa um pin conhecido do stub. **Não usar placeholders** — causa `manifest unknown`. |
 | `PORTAL_PUBLIC_URL` | URL pública do Portal (default `https://portal.work4you.ai`) |
 
-A imagem golden vive no app Fly `work4you-cloud-runtime` (repo FORK `services/work4you-cloud-agent/`). Hoje é um runtime de arranque (health + `/sessions`); a imagem completa do agent Work4You substitui via `WORK4YOU_AGENT_IMAGE`.
+A imagem golden vive no app Fly `work4you-cloud-runtime` (repo FORK `services/work4you-cloud-agent/`). Hoje é um runtime de arranque (health + `/sessions`). O Portal **não** sobrescreve o CMD da máquina — a imagem corre como está no Dockerfile (`python server.py`).
