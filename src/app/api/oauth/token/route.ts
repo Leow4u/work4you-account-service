@@ -3,6 +3,12 @@ import { prisma } from '@/lib/db'
 import { newOpaqueToken, sha256, signAccessToken } from '@/lib/crypto'
 import { buildPaidServiceAccess } from '@/lib/account-entitlement'
 import { getTier } from '@/lib/tiers'
+import { parseAgentClientId } from '@/lib/agent-redirect-uri'
+import {
+  OAUTH_CONTRACT_VERSION,
+  refreshTtlForClient,
+  verifyPkceS256,
+} from '@/lib/oauth-agent'
 
 export const runtime = 'nodejs'
 
@@ -29,10 +35,58 @@ async function entitlementClaims(orgId: string) {
   }
 }
 
+type TokenExtras = {
+  agentInstanceId?: string
+  oauthContractVersion?: number
+}
+
+async function issueTokens(args: {
+  user: { privyDid: string }
+  orgId: string
+  clientId: string
+  scope: string
+  sessionId: string
+  refreshToken: string
+  refreshExpiresAt: Date
+  extras?: TokenExtras
+}) {
+  const ent = await entitlementClaims(args.orgId)
+  const { token, expiresIn, jti } = await signAccessToken({
+    sub: args.user.privyDid,
+    clientId: args.clientId,
+    scope: args.scope,
+    orgId: args.orgId,
+    sessionId: args.sessionId,
+    paidAccess: ent.paidAccess,
+    subscriptionTier: ent.subscriptionTier,
+    agentInstanceId: args.extras?.agentInstanceId,
+    oauthContractVersion: args.extras?.oauthContractVersion,
+  })
+
+  await prisma.oAuthSession.update({
+    where: { id: args.sessionId },
+    data: {
+      refreshTokenHash: sha256(args.refreshToken),
+      accessJti: jti,
+      expiresAt: args.refreshExpiresAt,
+      lastActiveAt: new Date(),
+    },
+  })
+
+  return {
+    access_token: token,
+    token_type: 'bearer',
+    expires_in: expiresIn,
+    refresh_token: args.refreshToken,
+    scope: args.scope,
+  }
+}
+
 /**
  * POST /api/oauth/token
  * Supports:
  *  - grant_type=urn:ietf:params:oauth:grant-type:device_code
+ *  - grant_type=authorization_code (agent dashboard + PKCE)
  *  - grant_type=refresh_token
  */
 export async function POST(req: NextRequest) {
@@ -42,6 +96,9 @@ export async function POST(req: NextRequest) {
 
   if (grantType === 'urn:ietf:params:oauth:grant-type:device_code') {
     return deviceCodeGrant(form, clientId)
+  }
+  if (grantType === 'authorization_code') {
+    return authorizationCodeGrant(form, clientId)
   }
   if (grantType === 'refresh_token') {
     const headerRt =
@@ -53,6 +110,78 @@ export async function POST(req: NextRequest) {
     return refreshGrant(refreshToken, clientId)
   }
   return oauthError('unsupported_grant_type')
+}
+
+async function authorizationCodeGrant(form: FormData, clientId: string) {
+  const code = formGet(form, 'code')
+  const redirectUri = formGet(form, 'redirect_uri')
+  const codeVerifier = formGet(form, 'code_verifier')
+
+  if (!code || !redirectUri || !codeVerifier) {
+    return oauthError('invalid_request', 'code, redirect_uri, code_verifier required')
+  }
+
+  const parsedClient = parseAgentClientId(clientId)
+  if (!parsedClient) {
+    return oauthError('invalid_client', 'client_id must be agent:{instance_id}')
+  }
+
+  const row = await prisma.oAuthAuthorizationCode.findUnique({
+    where: { codeHash: sha256(code) },
+  })
+  if (!row || row.clientId !== clientId) {
+    return oauthError('invalid_grant', 'Unknown authorization code')
+  }
+  if (row.consumedAt || row.expiresAt.getTime() < Date.now()) {
+    return oauthError('invalid_grant', 'Authorization code expired')
+  }
+  if (row.redirectUri !== redirectUri) {
+    return oauthError('redirect_uri_mismatch')
+  }
+  if (!verifyPkceS256(codeVerifier, row.codeChallenge)) {
+    return oauthError('invalid_grant', 'PKCE verification failed')
+  }
+  if (row.agentInstanceId !== parsedClient.instanceId) {
+    return oauthError('invalid_client', 'agent_instance_id mismatch')
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: row.userId } })
+  if (!user) return oauthError('invalid_grant', 'User missing')
+
+  const refreshToken = newOpaqueToken(48)
+  const refreshExpiresAt = new Date(Date.now() + refreshTtlForClient(clientId))
+  const session = await prisma.oAuthSession.create({
+    data: {
+      orgId: row.orgId,
+      userId: user.id,
+      clientId: row.clientId,
+      scope: row.scope,
+      refreshTokenHash: sha256(refreshToken),
+      expiresAt: refreshExpiresAt,
+      lastActiveAt: new Date(),
+    },
+  })
+
+  await prisma.oAuthAuthorizationCode.update({
+    where: { id: row.id },
+    data: { consumedAt: new Date() },
+  })
+
+  const payload = await issueTokens({
+    user,
+    orgId: row.orgId,
+    clientId: row.clientId,
+    scope: row.scope,
+    sessionId: session.id,
+    refreshToken,
+    refreshExpiresAt,
+    extras: {
+      agentInstanceId: row.agentInstanceId,
+      oauthContractVersion: OAUTH_CONTRACT_VERSION,
+    },
+  })
+
+  return NextResponse.json(payload)
 }
 
 async function deviceCodeGrant(form: FormData, clientId: string) {
@@ -83,7 +212,7 @@ async function deviceCodeGrant(form: FormData, clientId: string) {
   if (!user) return oauthError('invalid_grant', 'User missing')
 
   const refreshToken = newOpaqueToken(48)
-  const expiresAt = new Date(Date.now() + 30 * 24 * 3600 * 1000)
+  const refreshExpiresAt = new Date(Date.now() + refreshTtlForClient(clientId))
   const session = await prisma.oAuthSession.create({
     data: {
       orgId: row.orgId,
@@ -91,25 +220,19 @@ async function deviceCodeGrant(form: FormData, clientId: string) {
       clientId: row.clientId,
       scope: row.scope,
       refreshTokenHash: sha256(refreshToken),
-      expiresAt,
+      expiresAt: refreshExpiresAt,
       lastActiveAt: new Date(),
     },
   })
 
-  const ent = await entitlementClaims(row.orgId)
-  const { token, expiresIn, jti } = await signAccessToken({
-    sub: user.privyDid,
+  const payload = await issueTokens({
+    user,
+    orgId: row.orgId,
     clientId: row.clientId,
     scope: row.scope,
-    orgId: row.orgId,
     sessionId: session.id,
-    paidAccess: ent.paidAccess,
-    subscriptionTier: ent.subscriptionTier,
-  })
-
-  await prisma.oAuthSession.update({
-    where: { id: session.id },
-    data: { accessJti: jti },
+    refreshToken,
+    refreshExpiresAt,
   })
 
   await prisma.deviceCode.update({
@@ -117,13 +240,7 @@ async function deviceCodeGrant(form: FormData, clientId: string) {
     data: { status: 'expired' },
   })
 
-  return NextResponse.json({
-    access_token: token,
-    token_type: 'bearer',
-    expires_in: expiresIn,
-    refresh_token: refreshToken,
-    scope: row.scope,
-  })
+  return NextResponse.json(payload)
 }
 
 async function refreshGrant(refreshToken: string, clientId: string) {
@@ -143,32 +260,24 @@ async function refreshGrant(refreshToken: string, clientId: string) {
     return oauthError('invalid_grant', 'Refresh token expired')
   }
 
-  const ent = await entitlementClaims(session.orgId)
   const newRefresh = newOpaqueToken(48)
-  const { token, expiresIn, jti } = await signAccessToken({
-    sub: session.user.privyDid,
+  const refreshExpiresAt = new Date(Date.now() + refreshTtlForClient(clientId))
+  const parsedClient = parseAgentClientId(clientId)
+  const payload = await issueTokens({
+    user: session.user,
+    orgId: session.orgId,
     clientId: session.clientId,
     scope: session.scope,
-    orgId: session.orgId,
     sessionId: session.id,
-    paidAccess: ent.paidAccess,
-    subscriptionTier: ent.subscriptionTier,
+    refreshToken: newRefresh,
+    refreshExpiresAt,
+    extras: parsedClient
+      ? {
+          agentInstanceId: parsedClient.instanceId,
+          oauthContractVersion: OAUTH_CONTRACT_VERSION,
+        }
+      : undefined,
   })
 
-  await prisma.oAuthSession.update({
-    where: { id: session.id },
-    data: {
-      refreshTokenHash: sha256(newRefresh),
-      accessJti: jti,
-      lastActiveAt: new Date(),
-    },
-  })
-
-  return NextResponse.json({
-    access_token: token,
-    token_type: 'bearer',
-    expires_in: expiresIn,
-    refresh_token: newRefresh,
-    scope: session.scope,
-  })
+  return NextResponse.json(payload)
 }

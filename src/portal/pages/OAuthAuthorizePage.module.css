@@ -1,0 +1,109 @@
+.shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  background: var(--off-white, #f7f5f0);
+}
+
+.card {
+  width: min(100%, 28rem);
+  background: #fff;
+  border: 1px solid rgba(26, 26, 26, 0.08);
+  border-radius: 1rem;
+  padding: 1.75rem;
+  box-shadow: 0 12px 40px rgba(26, 26, 26, 0.06);
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+  color: var(--grafite, #1a1a1a);
+}
+
+.lead {
+  margin: 0 0 1.25rem;
+  color: var(--grafite, #1a1a1a);
+  opacity: 0.82;
+  line-height: 1.5;
+}
+
+.meta {
+  margin: 0 0 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.meta div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.meta dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(26, 26, 26, 0.55);
+}
+
+.meta dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--grafite, #1a1a1a);
+  word-break: break-all;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.primary,
+.secondary {
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.primary {
+  background: var(--amarelo, #f5c518);
+  color: var(--grafite, #1a1a1a);
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.secondary {
+  background: transparent;
+  border-color: rgba(26, 26, 26, 0.15);
+  color: var(--grafite, #1a1a1a);
+}
+
+.error {
+  color: #b42318;
+  margin: 0 0 1rem;
+}
+
+.muted {
+  margin: 0;
+  color: rgba(26, 26, 26, 0.65);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}

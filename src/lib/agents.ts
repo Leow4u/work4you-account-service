@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
-import type { AgentInstance, Org } from '@prisma/client'
+import type { AgentInstance, Org, User } from '@prisma/client'
 import { prisma } from './db'
+import { mintAgentBootstrapSession } from './agent-bootstrap'
 import {
   CLOUD_SIZES,
   flyGuestForSize,
@@ -108,6 +109,7 @@ export async function getAgent(
  */
 export async function createAndProvisionAgent(args: {
   org: Org
+  user: Pick<User, 'id' | 'privyDid'>
   name: string
   size?: unknown
   model?: string | null
@@ -119,6 +121,10 @@ export async function createAndProvisionAgent(args: {
   const flyAppName = flyAppNameForSlug(slug)
   const region = process.env.FLY_REGION || 'gru'
   const port = agentDashboardPort()
+  const portalUrl =
+    process.env.PORTAL_PUBLIC_URL ||
+    process.env.OAUTH_ISSUER ||
+    'https://portal.work4you.ai'
 
   const row = await prisma.agentInstance.create({
     data: {
@@ -152,17 +158,30 @@ export async function createAndProvisionAgent(args: {
     })
 
     const dashboardUrl = `https://${flyAppName}.fly.dev`
+    const drainSecret = randomBytes(24).toString('base64url')
+    const oauthClientId = `agent:${row.id}`
+
+    const bootstrap = await mintAgentBootstrapSession({
+      org: args.org,
+      user: args.user,
+      agent: row,
+    })
+
     const env: Record<string, string> = {
-      WORK4YOU_DASHBOARD: '1',
+      WORK4YOU_HOME: '/opt/data',
+      PORT: String(port),
       WORK4YOU_DASHBOARD_HOST: '0.0.0.0',
       WORK4YOU_DASHBOARD_PORT: String(port),
-      WORK4YOU_HOME: '/opt/data',
-      PORTAL_URL: process.env.PORTAL_PUBLIC_URL || 'https://portal.work4you.ai',
+      WORK4YOU_DASHBOARD_PUBLIC_URL: dashboardUrl,
+      WORK4YOU_DASHBOARD_PORTAL_URL: portalUrl,
+      WORK4YOU_DASHBOARD_OAUTH_CLIENT_ID: oauthClientId,
+      WORK4YOU_DASHBOARD_DRAIN_SECRET: drainSecret,
+      WORK4YOU_AUTH_JSON_BOOTSTRAP: JSON.stringify(bootstrap.authJson),
+      WORK4YOU_GATEWAY_BOOTSTRAP_STATE: 'running',
       WORK4YOU_CLOUD_INSTANCE_ID: row.id,
       WORK4YOU_CLOUD_ORG_ID: args.org.id,
-      // Basic auth until Portal OAuth client is wired per-instance.
-      WORK4YOU_DASHBOARD_BASIC_AUTH_USERNAME: 'work4you',
-      WORK4YOU_DASHBOARD_BASIC_AUTH_PASSWORD: randomBytes(18).toString('base64url'),
+      WORK4YOU_PORTAL_BASE_URL: portalUrl,
+      PORTAL_URL: portalUrl,
     }
     if (args.model?.trim()) {
       env.WORK4YOU_DEFAULT_MODEL = args.model.trim()
@@ -174,6 +193,8 @@ export async function createAndProvisionAgent(args: {
         status: 'starting',
         flyVolumeId: volume.id,
         dashboardUrl,
+        bootstrapSessionId: bootstrap.sessionId,
+        dashboardDrainSecret: drainSecret,
       },
     })
 

@@ -68,6 +68,9 @@ export async function signAccessToken(params: {
   /** Fork JWT entitlement snapshot (UX gate; API remains authoritative). */
   paidAccess?: boolean
   subscriptionTier?: number
+  /** Agent dashboard OAuth (`agent:{instance_id}` clients). */
+  agentInstanceId?: string
+  oauthContractVersion?: number
 }): Promise<{ token: string; expiresIn: number; jti: string }> {
   const expiresIn = params.expiresInSec ?? 15 * 60
   const jti = newOpaqueToken(16)
@@ -80,6 +83,12 @@ export async function signAccessToken(params: {
     client_id: params.clientId,
     org_id: params.orgId,
     session_id: params.sessionId,
+  }
+  if (params.agentInstanceId) {
+    claims.agent_instance_id = params.agentInstanceId
+  }
+  if (typeof params.oauthContractVersion === 'number') {
+    claims.oauth_contract_version = params.oauthContractVersion
   }
   if (typeof params.paidAccess === 'boolean') {
     claims.paid_access = params.paidAccess

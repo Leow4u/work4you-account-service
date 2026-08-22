@@ -133,6 +133,26 @@ model OAuthSession {
   @@index([userId, revokedAt])
 }
 
+/// Short-lived authorization codes for agent dashboard OAuth (PKCE).
+model OAuthAuthorizationCode {
+  id                  String    @id @default(cuid())
+  codeHash            String    @unique
+  clientId            String
+  redirectUri         String
+  scope               String
+  orgId               String
+  userId              String
+  agentInstanceId     String
+  codeChallenge       String
+  codeChallengeMethod String    @default("S256")
+  expiresAt           DateTime
+  consumedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([clientId, consumedAt])
+  @@index([agentInstanceId])
+}
+
 /// Static Portal inference keys (`sk-work4you-…`).
 /// `keyHash` for auth; `keyEnc` (AES-GCM) so owners can copy again (Hermes).
 model ApiKey {
@@ -191,9 +211,14 @@ model AgentInstance {
   updatedAt              DateTime  @updatedAt
   startedAt              DateTime?
   stoppedAt              DateTime?
+  /// OAuth session id for the bootstrap `work4you-cli-vps` credential.
+  bootstrapSessionId     String?
+  /// Optional drain secret for scale-to-zero webhook auth.
+  dashboardDrainSecret   String?
 
   @@index([orgId, status])
   @@index([orgId, createdAt])
+  @@index([bootstrapSessionId])
 }
 
 /// One top-up charge (CLI poll contract).

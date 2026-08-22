@@ -149,6 +149,15 @@ export async function createMachine(args: {
   volumeId: string
   internalPort: number
 }): Promise<FlyMachine> {
+  const port = args.internalPort
+  // Fly runs the image entrypoint as a non-PID-1 child — s6 supervision is
+  // unavailable. Run gateway in the background and keep dashboard foreground.
+  const initCmd = [
+    '/bin/sh',
+    '-lc',
+    `work4you gateway run & exec work4you dashboard --host 0.0.0.0 --port ${port} --no-open`,
+  ]
+
   return flyFetch<FlyMachine>(
     `/apps/${encodeURIComponent(args.appName)}/machines`,
     {
@@ -160,6 +169,7 @@ export async function createMachine(args: {
           image: args.image,
           env: args.env,
           guest: args.guest,
+          init: { cmd: initCmd },
           services: [
             {
               protocol: 'tcp',

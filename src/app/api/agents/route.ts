@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
 
   const agent = await createAndProvisionAgent({
     org: resolved.org,
+    user: resolved.user,
     name,
     size: body.size,
     model: body.model ?? null,
