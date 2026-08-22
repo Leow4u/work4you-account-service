@@ -151,11 +151,22 @@ export async function createMachine(args: {
 }): Promise<FlyMachine> {
   const port = args.internalPort
   // Fly runs the image entrypoint as a non-PID-1 child — s6 supervision is
-  // unavailable. Run gateway in the background and keep dashboard foreground.
+  // unavailable. Prefer full Work4You (gateway + dashboard). If the golden
+  // image is still the Python bootstrap stub (no work4you binary), fall back
+  // to server.py so the machine stays reachable instead of 502.
   const initCmd = [
     '/bin/sh',
     '-lc',
-    `work4you gateway run & exec work4you dashboard --host 0.0.0.0 --port ${port} --no-open`,
+    [
+      'if command -v work4you >/dev/null 2>&1; then',
+      `  work4you gateway run & exec work4you dashboard --host 0.0.0.0 --port ${port} --no-open`,
+      'elif [ -f /app/server.py ]; then',
+      '  exec python -u /app/server.py',
+      'else',
+      '  echo "[work4you-cloud] no work4you binary and no /app/server.py" >&2',
+      '  exit 1',
+      'fi',
+    ].join(' '),
   ]
 
   return flyFetch<FlyMachine>(
