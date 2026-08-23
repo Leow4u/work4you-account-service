@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
 import type { AgentInstance, Org, User } from '@prisma/client'
 import { prisma } from './db'
+import { mintAgentBootstrapSession } from './agent-bootstrap'
 import {
   CLOUD_SIZES,
   flyGuestForSize,
@@ -157,16 +158,29 @@ export async function createAndProvisionAgent(args: {
     })
 
     const dashboardUrl = `https://${flyAppName}.fly.dev`
+    const drainSecret = randomBytes(24).toString('base64url')
+    const oauthClientId = `agent:${row.id}`
 
-    // Stub golden image (FORK services/work4you-cloud-agent/server.py) only needs
-    // port + instance metadata. OAuth/bootstrap env is added when the full agent
-    // image ships — not during stub provisioning.
+    const bootstrap = await mintAgentBootstrapSession({
+      org: args.org,
+      user: args.user,
+      agent: row,
+    })
+
     const env: Record<string, string> = {
       WORK4YOU_HOME: '/opt/data',
       PORT: String(port),
+      WORK4YOU_DASHBOARD_HOST: '0.0.0.0',
       WORK4YOU_DASHBOARD_PORT: String(port),
+      WORK4YOU_DASHBOARD_PUBLIC_URL: dashboardUrl,
+      WORK4YOU_DASHBOARD_PORTAL_URL: portalUrl,
+      WORK4YOU_DASHBOARD_OAUTH_CLIENT_ID: oauthClientId,
+      WORK4YOU_DASHBOARD_DRAIN_SECRET: drainSecret,
+      WORK4YOU_AUTH_JSON_BOOTSTRAP: JSON.stringify(bootstrap.authJson),
+      WORK4YOU_GATEWAY_BOOTSTRAP_STATE: 'running',
       WORK4YOU_CLOUD_INSTANCE_ID: row.id,
       WORK4YOU_CLOUD_ORG_ID: args.org.id,
+      WORK4YOU_PORTAL_BASE_URL: portalUrl,
       PORTAL_URL: portalUrl,
     }
     if (args.model?.trim()) {
@@ -179,6 +193,8 @@ export async function createAndProvisionAgent(args: {
         status: 'starting',
         flyVolumeId: volume.id,
         dashboardUrl,
+        bootstrapSessionId: bootstrap.sessionId,
+        dashboardDrainSecret: drainSecret,
       },
     })
 

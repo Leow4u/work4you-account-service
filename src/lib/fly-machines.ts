@@ -160,6 +160,19 @@ export async function createMachine(args: {
           image: args.image,
           env: args.env,
           guest: args.guest,
+          // Golden image ENTRYPOINT is entrypoint-dispatch.sh with empty CMD.
+          // Fly Machines are not PID 1, so we must pass the dashboard subcommand
+          // explicitly (same as fly.cloud-runtime.toml [processes] app=).
+          init: {
+            cmd: [
+              'dashboard',
+              '--host',
+              '0.0.0.0',
+              '--port',
+              String(args.internalPort),
+              '--no-open',
+            ],
+          },
           services: [
             {
               protocol: 'tcp',
@@ -251,8 +264,8 @@ export async function getMachine(
 export function agentImage(): string {
   return (
     process.env.WORK4YOU_AGENT_IMAGE ||
-    // Pin to a known-good remote tag; override via WORK4YOU_AGENT_IMAGE after redeploys.
-    'registry.fly.io/work4you-cloud-runtime:deployment-01M0JY209NVKM1C5Z8DKBQ0YW0'
+    // Release v2 — full Work4You golden image (FORK repo-root Dockerfile).
+    'registry.fly.io/work4you-cloud-runtime:deployment-01M0QG8FXP8V4J48RPR92KPQ2B'
   )
 }
 
