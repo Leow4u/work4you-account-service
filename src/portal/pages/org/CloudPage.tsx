@@ -606,7 +606,7 @@ export function CloudPage() {
                 disabled={creating || !createName.trim()}
                 onClick={() => void createAgent()}
               >
-                {creating ? 'A criar…' : `Criar ${selectedSize.label.toLowerCase()}`}
+                {creating ? 'A criar…' : 'Criar'}
               </button>
             </div>
           </div>
