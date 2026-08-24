@@ -264,8 +264,8 @@ export async function getMachine(
 export function agentImage(): string {
   return (
     process.env.WORK4YOU_AGENT_IMAGE ||
-    // Release v2 — full Work4You golden image (FORK repo-root Dockerfile).
-    'registry.fly.io/work4you-cloud-runtime:deployment-01M0QG8FXP8V4J48RPR92KPQ2B'
+    // Phase E — model seed + unsupervised gateway autostart on Fly.
+    'registry.fly.io/work4you-cloud-runtime:deployment-01M0SYFQR5K1MX2KKJGGT99G5Y'
   )
 }
 
