@@ -240,7 +240,7 @@ export function LocalDashboardsPage() {
               >
                 ×
               </button>
-              <p className={styles.modalEyebrow}>// MESSAGE</p>
+              <p className={styles.modalEyebrow}>{'// MESSAGE'}</p>
               <h3 id="local-register-title" className={styles.modalTitle}>
                 Registar dashboard
               </h3>
