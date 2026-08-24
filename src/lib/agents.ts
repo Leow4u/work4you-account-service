@@ -8,6 +8,7 @@ import {
   parseCloudSize,
   type CloudSizeId,
 } from './cloud-sizes'
+import { drainGatewayBeforeLifecycle } from './agent-gateway-drain'
 import {
   agentDashboardPort,
   agentImage,
@@ -22,6 +23,15 @@ import {
   stopMachine,
   waitMachine,
 } from './fly-machines'
+
+async function drainAgentGateway(row: AgentInstance): Promise<void> {
+  if (!row.dashboardUrl || !row.dashboardDrainSecret) return
+  await drainGatewayBeforeLifecycle({
+    dashboardUrl: row.dashboardUrl,
+    drainSecret: row.dashboardDrainSecret,
+    suppressNotification: true,
+  })
+}
 
 export type AgentDto = {
   id: string
@@ -280,6 +290,7 @@ export async function stopAgent(row: AgentInstance): Promise<AgentDto> {
     })
     return toAgentDto(updated)
   }
+  await drainAgentGateway(row)
   await stopMachine(row.flyAppName, row.flyMachineId)
   const updated = await prisma.agentInstance.update({
     where: { id: row.id },
@@ -318,6 +329,7 @@ export async function deleteAgent(row: AgentInstance): Promise<void> {
   })
   try {
     if (row.flyAppName && row.flyMachineId) {
+      await drainAgentGateway(row)
       await destroyMachine(row.flyAppName, row.flyMachineId)
     }
     if (row.flyAppName) {
