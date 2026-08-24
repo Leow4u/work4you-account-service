@@ -87,12 +87,29 @@ function flyAppNameForSlug(slug: string): string {
   return `w4y-agent-${slug}`.slice(0, 63)
 }
 
+const FLY_REFRESH_STATUSES = new Set(['provisioning', 'starting', 'deleting'])
+
+function agentNeedsFlyRefresh(row: AgentInstance): boolean {
+  if (!row.flyAppName || !row.flyMachineId) return false
+  if (FLY_REFRESH_STATUSES.has(row.status)) return true
+  // waitMachine timeout: Fly may already be started while DB still says starting.
+  if (row.status === 'starting' && row.errorMessage) return true
+  return false
+}
+
 export async function listAgents(orgId: string): Promise<AgentDto[]> {
   const rows = await prisma.agentInstance.findMany({
     where: { orgId },
     orderBy: { createdAt: 'desc' },
   })
-  return rows.map(toAgentDto)
+  return Promise.all(
+    rows.map(async (row) => {
+      if (agentNeedsFlyRefresh(row)) {
+        return refreshAgentStatus(row)
+      }
+      return toAgentDto(row)
+    }),
+  )
 }
 
 export async function getAgent(
@@ -287,19 +304,11 @@ export async function startAgent(row: AgentInstance): Promise<AgentDto> {
   try {
     await waitMachine(row.flyAppName, row.flyMachineId, 'started', 60)
   } catch {
-    // poll path will refresh
+    // list/detail refresh reconciles Fly state when wait times out.
   }
-  const updated = await prisma.agentInstance.update({
-    where: { id: row.id },
-    data: {
-      status: 'online',
-      startedAt: new Date(),
-      stoppedAt: null,
-      dashboardGatewayState: 'active',
-      errorMessage: null,
-    },
-  })
-  return toAgentDto(updated)
+  return refreshAgentStatus(
+    (await prisma.agentInstance.findUnique({ where: { id: row.id } })) ?? row,
+  )
 }
 
 export async function deleteAgent(row: AgentInstance): Promise<void> {
@@ -340,9 +349,20 @@ export async function refreshAgentStatus(
       status = 'starting'
       gateway = 'unknown'
     }
+    const patch: {
+      status: string
+      dashboardGatewayState: string
+      errorMessage: null
+      startedAt?: Date
+      stoppedAt?: Date | null
+    } = { status, dashboardGatewayState: gateway, errorMessage: null }
+    if (status === 'online' && !row.startedAt) {
+      patch.startedAt = new Date()
+      patch.stoppedAt = null
+    }
     const updated = await prisma.agentInstance.update({
       where: { id: row.id },
-      data: { status, dashboardGatewayState: gateway, errorMessage: null },
+      data: patch,
     })
     return toAgentDto(updated)
   } catch {
