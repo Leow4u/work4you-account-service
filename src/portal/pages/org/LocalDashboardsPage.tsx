@@ -433,7 +433,7 @@ export function LocalDashboardsPage() {
             <section className={styles.drawerSection}>
               <h4 className={styles.drawerSectionTitle}>Quem pode aceder</h4>
               <p className={styles.drawerSectionText}>
-                Apenas utilizadores da sua organização com login Work4You Portal.
+                Só você. Conta pessoal — o início de sessão limita-se a si.
               </p>
             </section>
 
@@ -453,12 +453,13 @@ export function LocalDashboardsPage() {
 
             <section className={styles.drawerSection}>
               <h4 className={styles.drawerSectionTitle}>
-                Dashboard redirect URI
+                URI de redirecionamento do painel de controle
               </h4>
               <p className={styles.drawerSectionText}>
-                Em localhost pode deixar em branco — qualquer porta local é
-                aceite. Se o dashboard for acessível num URL público, indique a
-                base abaixo (sem <code>/auth/callback</code>).
+                Deixe em branco se você executar o painel de controle apenas em
+                localhost — essa exceção é sempre permitida. Defina um domínio
+                base quando o painel de controle estiver acessível em um URL
+                público; nós adicionamos /auth/callback para você.
               </p>
               <label className={styles.field}>
                 <span>Base URL</span>
@@ -466,20 +467,27 @@ export function LocalDashboardsPage() {
                   className={styles.input}
                   value={editBaseUrl}
                   onChange={(e) => setEditBaseUrl(e.target.value)}
-                  placeholder="https://work4you.example.com"
+                  placeholder="https://hermes.mycompany.com"
                 />
               </label>
+              <div className={styles.drawerSaveRow}>
+                <button
+                  type="button"
+                  className={styles.primary}
+                  disabled={saveDisabled}
+                  onClick={() => void saveDashboard()}
+                >
+                  {saving ? 'A guardar…' : 'Guardar'}
+                </button>
+              </div>
             </section>
 
-            <div className={styles.drawerActions}>
-              <button
-                type="button"
-                className={styles.primary}
-                disabled={saveDisabled}
-                onClick={() => void saveDashboard()}
-              >
-                {saving ? 'A guardar…' : 'Guardar'}
-              </button>
+            <section className={styles.drawerSection}>
+              <h4 className={styles.drawerSectionTitle}>Apagar</h4>
+              <p className={styles.drawerSectionText}>
+                Remove este registo e bloqueia novas autorizações OAuth para o
+                respetivo client ID.
+              </p>
               <button
                 type="button"
                 className={styles.dangerLink}
@@ -488,7 +496,7 @@ export function LocalDashboardsPage() {
               >
                 {deleting ? 'A apagar…' : 'Apagar dashboard'}
               </button>
-            </div>
+            </section>
           </aside>
         </>
       ) : null}
