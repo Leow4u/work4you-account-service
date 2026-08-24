@@ -9,6 +9,7 @@ import {
   type CloudSizeId,
 } from './cloud-sizes'
 import { drainGatewayBeforeLifecycle } from './agent-gateway-drain'
+import { SELF_HOSTED_STATUS } from './self-hosted-dashboard'
 import {
   agentDashboardPort,
   agentImage,
@@ -109,7 +110,7 @@ function agentNeedsFlyRefresh(row: AgentInstance): boolean {
 
 export async function listAgents(orgId: string): Promise<AgentDto[]> {
   const rows = await prisma.agentInstance.findMany({
-    where: { orgId },
+    where: { orgId, status: { not: SELF_HOSTED_STATUS } },
     orderBy: { createdAt: 'desc' },
   })
   return Promise.all(

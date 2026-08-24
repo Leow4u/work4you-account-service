@@ -25,10 +25,34 @@ export function expectedAgentCallbackUri(dashboardUrl: string): string {
   return `${base}/auth/callback`
 }
 
+export function isLoopbackRedirectUri(redirectUri: string): boolean {
+  try {
+    const u = new URL(redirectUri.trim())
+    const host = u.hostname.toLowerCase()
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1'
+  } catch {
+    return false
+  }
+}
+
+/** Self-hosted dashboards registered without a public URL (Portal: LOCALHOST ONLY). */
+export function isLocalhostOnlyDashboard(
+  dashboardUrl: string | null | undefined,
+): boolean {
+  if (!dashboardUrl?.trim()) return true
+  const base = dashboardUrl.trim().replace(/\/$/, '')
+  return base === 'http://127.0.0.1' || base === 'http://localhost'
+}
+
 export function isAllowedAgentRedirectUri(
   dashboardUrl: string | null | undefined,
   redirectUri: string,
 ): boolean {
+  if (isLocalhostOnlyDashboard(dashboardUrl)) {
+    const path = redirectUri.trim()
+    if (!path.endsWith('/auth/callback')) return false
+    return isLoopbackRedirectUri(redirectUri)
+  }
   if (!dashboardUrl?.trim()) return false
   return (
     normalizeRedirectUri(redirectUri) ===
