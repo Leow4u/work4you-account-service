@@ -59,9 +59,13 @@ export function LocalDashboardsPage() {
   const [toast, setToast] = useState<string | null>(null)
 
   const [selected, setSelected] = useState<DashboardRow | null>(null)
+  const [editName, setEditName] = useState('')
   const [editBaseUrl, setEditBaseUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const baseUrlInfo =
+    'Em branco = localhost em qualquer porta. Com URL público, usamos {origin}/auth/callback.'
 
   const authHeaders = useCallback(async () => {
     const token = await getAccessToken()
@@ -113,14 +117,17 @@ export function LocalDashboardsPage() {
 
   useEffect(() => {
     if (!selected) {
+      setEditName('')
       setEditBaseUrl('')
       return
     }
+    setEditName(selected.name)
     setEditBaseUrl(baseUrlFromRow(selected))
   }, [selected])
 
   function openEditor(row: DashboardRow) {
     setSelected(row)
+    setEditName(row.name)
     setEditBaseUrl(baseUrlFromRow(row))
   }
 
@@ -175,18 +182,31 @@ export function LocalDashboardsPage() {
 
   async function saveDashboard() {
     if (!selected) return
+    const name = editName.trim()
+    if (!name) {
+      setError('O nome do dashboard não pode ficar vazio.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
       const headers = await authHeaders()
       if (!headers) return
+      const payload: {
+        client_id: string
+        name?: string
+        custom_redirect_uri?: string
+      } = { client_id: selected.client_id }
+      if (name !== selected.name) {
+        payload.name = name
+      }
+      if (editBaseUrl.trim() !== baseUrlFromRow(selected)) {
+        payload.custom_redirect_uri = customRedirectFromBaseUrl(editBaseUrl)
+      }
       const res = await fetch(`/api/oauth/self-hosted-client${orgQuery}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: selected.client_id,
-          custom_redirect_uri: customRedirectFromBaseUrl(editBaseUrl),
-        }),
+        body: JSON.stringify(payload),
       })
       const body = (await res.json().catch(() => ({}))) as DashboardRow & {
         error_description?: string
@@ -244,7 +264,9 @@ export function LocalDashboardsPage() {
   const saveDisabled =
     saving ||
     !selected ||
-    editBaseUrl.trim() === baseUrlFromRow(selected)
+    !editName.trim() ||
+    (editName.trim() === selected?.name &&
+      editBaseUrl.trim() === baseUrlFromRow(selected))
 
   const countLabel = loading
     ? 'A carregar…'
@@ -423,12 +445,25 @@ export function LocalDashboardsPage() {
             </button>
             <p className={styles.drawerEyebrow}>{'// Local Dashboard'}</p>
             <h3 id="local-edit-title" className={styles.drawerTitle}>
-              {selected.name}
+              {editName.trim() || selected.name}
             </h3>
             <p className={styles.drawerLead}>
               Copie o OAuth client ID para o dashboard Work4You local e,
               opcionalmente, fixe um redirect URI público.
             </p>
+
+            <section className={styles.drawerSection}>
+              <h4 className={styles.drawerSectionTitle}>Nome</h4>
+              <label className={styles.field}>
+                <span>Nome do dashboard</span>
+                <input
+                  className={styles.input}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  maxLength={64}
+                />
+              </label>
+            </section>
 
             <section className={styles.drawerSection}>
               <h4 className={styles.drawerSectionTitle}>Quem pode aceder</h4>
@@ -462,7 +497,17 @@ export function LocalDashboardsPage() {
                 público; nós adicionamos /auth/callback para você.
               </p>
               <label className={styles.field}>
-                <span>Base URL</span>
+                <span className={styles.labelRow}>
+                  <span>Base URL</span>
+                  <button
+                    type="button"
+                    className={styles.infoBtn}
+                    aria-label={baseUrlInfo}
+                    title={baseUrlInfo}
+                  >
+                    ⓘ
+                  </button>
+                </span>
                 <input
                   className={styles.input}
                   value={editBaseUrl}

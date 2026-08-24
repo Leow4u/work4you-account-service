@@ -212,6 +212,31 @@
   color: var(--tinta);
 }
 
+.labelRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.infoBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--grafite);
+  cursor: help;
+}
+
+.infoBtn:hover {
+  color: var(--tinta);
+}
+
 .input {
   width: 100%;
   min-height: 2.35rem;
