@@ -73,11 +73,15 @@ const FALLBACK_SIZES: CloudSize[] = [
   },
 ]
 
-const DEFAULT_MODELS = [
-  'openai/gpt-4o-mini',
-  'anthropic/claude-sonnet-4',
-  'google/gemini-2.5-flash',
-  'openai/gpt-4o',
+type AnnotatedModelOption = {
+  id: string
+  name: string
+  free: boolean
+  locked: boolean
+}
+
+const FALLBACK_MODELS: AnnotatedModelOption[] = [
+  { id: 'openrouter/free', name: 'openrouter/free', free: true, locked: false },
 ]
 
 const SIZE_LABELS: Record<string, string> = {
@@ -153,7 +157,10 @@ export function CloudPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createName, setCreateName] = useState('O meu agent')
   const [createSize, setCreateSize] = useState<CloudSize['id']>('small')
-  const [createModel, setCreateModel] = useState(DEFAULT_MODELS[0]!)
+  const [createModel, setCreateModel] = useState(FALLBACK_MODELS[0]!.id)
+  const [createModels, setCreateModels] = useState<AnnotatedModelOption[]>(FALLBACK_MODELS)
+  const [createModelsLoading, setCreateModelsLoading] = useState(false)
+  const [paidPlan, setPaidPlan] = useState<boolean | null>(null)
   const [creating, setCreating] = useState(false)
 
   const [renameId, setRenameId] = useState<string | null>(null)
@@ -172,26 +179,30 @@ export function CloudPage() {
 
   const orgQuery = orgId ? `?org=${encodeURIComponent(orgId)}` : ''
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!authenticated) {
       setAgents([])
       setLoading(false)
       return
     }
-    setLoading(true)
-    setError(null)
+    if (!opts?.silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const headers = await authHeaders()
       if (!headers) return
       const res = await fetch(`/api/agents${orgQuery}`, { headers })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        setError(
-          typeof body?.message === 'string'
-            ? body.message
-            : 'Não foi possível carregar as instâncias.',
-        )
-        setAgents([])
+        if (!opts?.silent) {
+          setError(
+            typeof body?.message === 'string'
+              ? body.message
+              : 'Não foi possível carregar as instâncias.',
+          )
+          setAgents([])
+        }
         return
       }
       const data = (await res.json()) as {
@@ -203,10 +214,12 @@ export function CloudPage() {
         setSizes(data.sizes)
       }
     } catch {
-      setError('Não foi possível contactar o Portal.')
-      setAgents([])
+      if (!opts?.silent) {
+        setError('Não foi possível contactar o Portal.')
+        setAgents([])
+      }
     } finally {
-      setLoading(false)
+      if (!opts?.silent) setLoading(false)
     }
   }, [authenticated, authHeaders, orgQuery])
 
@@ -220,9 +233,47 @@ export function CloudPage() {
       ['provisioning', 'starting', 'deleting'].includes(a.status),
     )
     if (!pending) return
-    const t = setInterval(() => void load(), 4000)
+    const t = setInterval(() => void load({ silent: true }), 4000)
     return () => clearInterval(t)
   }, [agents, load])
+
+  useEffect(() => {
+    if (!createOpen || !authenticated) return
+    let cancelled = false
+    void (async () => {
+      setCreateModelsLoading(true)
+      try {
+        const headers = await authHeaders()
+        if (!headers || cancelled) return
+        const res = await fetch(`/api/keys/models${orgQuery}`, { headers })
+        if (!res.ok || cancelled) return
+        const data = (await res.json()) as {
+          defaultModel?: string
+          paidPlan?: boolean
+          models?: AnnotatedModelOption[]
+        }
+        const models = Array.isArray(data.models) ? data.models : FALLBACK_MODELS
+        if (cancelled) return
+        setCreateModels(models)
+        setPaidPlan(typeof data.paidPlan === 'boolean' ? data.paidPlan : null)
+        const defaultId =
+          typeof data.defaultModel === 'string' && data.defaultModel
+            ? data.defaultModel
+            : models.find((m) => !m.locked)?.id || FALLBACK_MODELS[0]!.id
+        setCreateModel(defaultId)
+      } catch {
+        if (!cancelled) {
+          setCreateModels(FALLBACK_MODELS)
+          setCreateModel(FALLBACK_MODELS[0]!.id)
+        }
+      } finally {
+        if (!cancelled) setCreateModelsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [createOpen, authenticated, authHeaders, orgQuery])
 
   const createAgent = async () => {
     setCreating(true)
@@ -496,14 +547,21 @@ export function CloudPage() {
 
             <label className={styles.field}>
               <span>Modelo</span>
+              {paidPlan === false ? (
+                <p className={styles.modalLead}>
+                  Plano Free — modelos pagos aparecem bloqueados.
+                </p>
+              ) : null}
               <select
                 className={styles.input}
                 value={createModel}
+                disabled={createModelsLoading}
                 onChange={(e) => setCreateModel(e.target.value)}
               >
-                {DEFAULT_MODELS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
+                {createModels.map((m) => (
+                  <option key={m.id} value={m.id} disabled={m.locked}>
+                    {m.name}
+                    {m.locked ? ' (plano pago)' : m.free ? ' (free)' : ''}
                   </option>
                 ))}
               </select>

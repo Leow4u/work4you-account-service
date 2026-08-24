@@ -14,7 +14,6 @@ export async function GET() {
     'deepseek/deepseek-chat:free',
     'google/gemma-3-27b-it:free',
     'meta-llama/llama-3.3-70b-instruct:free',
-    'qwen/qwen3-32b:free',
     'mistralai/mistral-small-3.1-24b-instruct:free',
   ].map((modelName, position) => ({
     modelName,

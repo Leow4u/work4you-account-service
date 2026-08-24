@@ -1,6 +1,8 @@
 import type { AgentInstance, Org, User } from '@prisma/client'
 import { prisma } from './db'
 import { newOpaqueToken, sha256, signAccessToken } from './crypto'
+import { buildPaidServiceAccess } from './account-entitlement'
+import { getTier } from './tiers'
 import {
   BOOTSTRAP_CLIENT_ID,
   BOOTSTRAP_REFRESH_TTL_MS,
@@ -59,6 +61,8 @@ export async function mintAgentBootstrapSession(args: {
     orgId: args.org.id,
     sessionId: session.id,
     agentInstanceId: args.agent.id,
+    paidAccess: buildPaidServiceAccess(args.org).allowed,
+    subscriptionTier: getTier(args.org.subscriptionTierId || 'free').tierOrder,
   })
 
   const expiresAtIso = new Date(

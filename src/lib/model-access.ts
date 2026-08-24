@@ -65,6 +65,7 @@ export function annotateModels(params: {
 
 export function pickDefaultUnlocked(models: AnnotatedModel[]): string {
   const preferred = [
+    'openrouter/free',
     'openai/gpt-4o-mini',
     'google/gemini-2.5-flash',
     'deepseek/deepseek-chat',
@@ -75,5 +76,5 @@ export function pickDefaultUnlocked(models: AnnotatedModel[]): string {
     if (hit) return hit.id
   }
   const first = models.find((m) => !m.locked)
-  return first?.id || preferred[0]
+  return first?.id || 'openrouter/free'
 }

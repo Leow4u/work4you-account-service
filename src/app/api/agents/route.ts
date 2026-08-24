@@ -4,6 +4,10 @@ import {
   createAndProvisionAgent,
   listAgents,
 } from '@/lib/agents'
+import {
+  fetchAnnotatedModelsForOrg,
+  resolveProvisionModel,
+} from '@/lib/inference-catalog'
 import { resolvePortalOrg } from '@/lib/request-auth'
 
 export const runtime = 'nodejs'
@@ -11,7 +15,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 300
 
 /**
- * GET /api/agents?org= — list Cloud instances (Desktop + Portal).
+ * GET /api/agents?org= — list Cloud instances; reconciles Fly state for pending rows.
  * Auth: Bearer or privy-token cookie.
  * Multi-org without ?org= → 409 org_selection_required.
  *
@@ -64,12 +68,23 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  let model = body.model?.trim() || null
+  const catalog = await fetchAnnotatedModelsForOrg({
+    org: resolved.org,
+    user: resolved.user,
+  })
+  if (!('error' in catalog)) {
+    model = resolveProvisionModel(catalog, model)
+  } else if (!model) {
+    model = 'openrouter/free'
+  }
+
   const agent = await createAndProvisionAgent({
     org: resolved.org,
     user: resolved.user,
     name,
     size: body.size,
-    model: body.model ?? null,
+    model,
   })
   return NextResponse.json({ agent }, { status: 201 })
 }
