@@ -32,6 +32,21 @@ function redirectLabel(row: DashboardRow): string {
   }
 }
 
+function baseUrlFromRow(row: DashboardRow): string {
+  if (!row.custom_redirect_uri) return ''
+  try {
+    return new URL(row.custom_redirect_uri).origin
+  } catch {
+    return ''
+  }
+}
+
+function customRedirectFromBaseUrl(base: string): string {
+  const trimmed = base.trim()
+  if (!trimmed) return ''
+  return `${trimmed.replace(/\/$/, '')}/auth/callback`
+}
+
 export function LocalDashboardsPage() {
   const { orgId } = useParams()
   const { getAccessToken, authenticated, ready } = usePrivy()
@@ -42,6 +57,11 @@ export function LocalDashboardsPage() {
   const [registerName, setRegisterName] = useState('')
   const [registering, setRegistering] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+
+  const [selected, setSelected] = useState<DashboardRow | null>(null)
+  const [editBaseUrl, setEditBaseUrl] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const authHeaders = useCallback(async () => {
     const token = await getAccessToken()
@@ -91,6 +111,24 @@ export function LocalDashboardsPage() {
     return () => clearTimeout(t)
   }, [toast])
 
+  useEffect(() => {
+    if (!selected) {
+      setEditBaseUrl('')
+      return
+    }
+    setEditBaseUrl(baseUrlFromRow(selected))
+  }, [selected])
+
+  function openEditor(row: DashboardRow) {
+    setSelected(row)
+    setEditBaseUrl(baseUrlFromRow(row))
+  }
+
+  function closeEditor() {
+    if (saving || deleting) return
+    setSelected(null)
+  }
+
   async function copyClientId(clientId: string) {
     try {
       await navigator.clipboard.writeText(clientId)
@@ -135,6 +173,79 @@ export function LocalDashboardsPage() {
     }
   }
 
+  async function saveDashboard() {
+    if (!selected) return
+    setSaving(true)
+    setError(null)
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const res = await fetch(`/api/oauth/self-hosted-client${orgQuery}`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: selected.client_id,
+          custom_redirect_uri: customRedirectFromBaseUrl(editBaseUrl),
+        }),
+      })
+      const body = (await res.json().catch(() => ({}))) as DashboardRow & {
+        error_description?: string
+      }
+      if (!res.ok) {
+        setError(
+          typeof body.error_description === 'string'
+            ? body.error_description
+            : 'Não foi possível guardar as alterações.',
+        )
+        return
+      }
+      setToast('Dashboard atualizado.')
+      setSelected(null)
+      await load()
+    } catch {
+      setError('Não foi possível contactar o Portal.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteDashboard() {
+    if (!selected) return
+    if (
+      !window.confirm(
+        `Apagar o dashboard "${selected.name}"? O OAuth client deixa de funcionar.`,
+      )
+    ) {
+      return
+    }
+    setDeleting(true)
+    setError(null)
+    try {
+      const headers = await authHeaders()
+      if (!headers) return
+      const res = await fetch(
+        `/api/oauth/self-hosted-client/${encodeURIComponent(selected.id)}${orgQuery}`,
+        { method: 'DELETE', headers },
+      )
+      if (!res.ok) {
+        setError('Não foi possível apagar o dashboard.')
+        return
+      }
+      setToast(`Dashboard "${selected.name}" apagado.`)
+      setSelected(null)
+      await load()
+    } catch {
+      setError('Não foi possível contactar o Portal.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const saveDisabled =
+    saving ||
+    !selected ||
+    editBaseUrl.trim() === baseUrlFromRow(selected)
+
   const countLabel = loading
     ? 'A carregar…'
     : rows.length === 0
@@ -166,8 +277,8 @@ export function LocalDashboardsPage() {
           <p className={styles.emptyTitle}>Nenhum dashboard registado</p>
           <p className={styles.emptyText}>
             Clique em Registar dashboard para obter um OAuth client ID. URIs
-            localhost são sempre permitidas; defina um URL público depois com
-            work4you dashboard register --redirect-uri ou ao editar o registo.
+            localhost são sempre permitidas; defina um URL público depois na
+            engrenagem de cada linha.
           </p>
         </section>
       ) : null}
@@ -181,11 +292,12 @@ export function LocalDashboardsPage() {
                 <th>OAuth client ID</th>
                 <th>Redirect URI</th>
                 <th>Criado</th>
+                <th className={styles.actionsCol} aria-label="Ações" />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className={styles.dataRow}>
                   <td>{row.name}</td>
                   <td>
                     <div className={styles.clientCell}>
@@ -212,6 +324,17 @@ export function LocalDashboardsPage() {
                     )}
                   </td>
                   <td>{formatCreated(row.created_at)}</td>
+                  <td className={styles.actionsCol}>
+                    <button
+                      type="button"
+                      className={styles.gearBtn}
+                      title="Editar dashboard"
+                      aria-label={`Editar ${row.name}`}
+                      onClick={() => openEditor(row)}
+                    >
+                      ⚙
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -261,7 +384,7 @@ export function LocalDashboardsPage() {
               <p className={styles.modalLead}>
                 Receberá um OAuth client ID na tabela após registar. URIs
                 localhost são sempre permitidas; defina um URL público depois
-                se precisar.
+                na engrenagem.
               </p>
               <div className={styles.modalActions}>
                 <button
@@ -276,6 +399,98 @@ export function LocalDashboardsPage() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {selected ? (
+        <>
+          <div
+            className={styles.drawerBackdrop}
+            role="presentation"
+            onClick={closeEditor}
+          />
+          <aside
+            className={styles.drawer}
+            role="dialog"
+            aria-labelledby="local-edit-title"
+          >
+            <button
+              type="button"
+              className={styles.drawerClose}
+              aria-label="Fechar"
+              onClick={closeEditor}
+            >
+              ×
+            </button>
+            <p className={styles.drawerEyebrow}>{'// Local Dashboard'}</p>
+            <h3 id="local-edit-title" className={styles.drawerTitle}>
+              {selected.name}
+            </h3>
+            <p className={styles.drawerLead}>
+              Copie o OAuth client ID para o dashboard Work4You local e,
+              opcionalmente, fixe um redirect URI público.
+            </p>
+
+            <section className={styles.drawerSection}>
+              <h4 className={styles.drawerSectionTitle}>Quem pode aceder</h4>
+              <p className={styles.drawerSectionText}>
+                Apenas utilizadores da sua organização com login Work4You Portal.
+              </p>
+            </section>
+
+            <section className={styles.drawerSection}>
+              <h4 className={styles.drawerSectionTitle}>OAuth client ID</h4>
+              <div className={styles.drawerClientRow}>
+                <code className={styles.mono}>{selected.client_id}</code>
+                <button
+                  type="button"
+                  className={styles.copyBtn}
+                  onClick={() => void copyClientId(selected.client_id)}
+                >
+                  Copiar
+                </button>
+              </div>
+            </section>
+
+            <section className={styles.drawerSection}>
+              <h4 className={styles.drawerSectionTitle}>
+                Dashboard redirect URI
+              </h4>
+              <p className={styles.drawerSectionText}>
+                Em localhost pode deixar em branco — qualquer porta local é
+                aceite. Se o dashboard for acessível num URL público, indique a
+                base abaixo (sem <code>/auth/callback</code>).
+              </p>
+              <label className={styles.field}>
+                <span>Base URL</span>
+                <input
+                  className={styles.input}
+                  value={editBaseUrl}
+                  onChange={(e) => setEditBaseUrl(e.target.value)}
+                  placeholder="https://work4you.example.com"
+                />
+              </label>
+            </section>
+
+            <div className={styles.drawerActions}>
+              <button
+                type="button"
+                className={styles.primary}
+                disabled={saveDisabled}
+                onClick={() => void saveDashboard()}
+              >
+                {saving ? 'A guardar…' : 'Guardar'}
+              </button>
+              <button
+                type="button"
+                className={styles.dangerLink}
+                disabled={deleting}
+                onClick={() => void deleteDashboard()}
+              >
+                {deleting ? 'A apagar…' : 'Apagar dashboard'}
+              </button>
+            </div>
+          </aside>
+        </>
       ) : null}
 
       {toast ? <div className={styles.toast}>{toast}</div> : null}
