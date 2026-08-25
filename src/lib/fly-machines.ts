@@ -265,7 +265,7 @@ export function agentImage(): string {
   return (
     process.env.WORK4YOU_AGENT_IMAGE ||
     // Web chat desktop parity + golden image 2026-08-25.
-    'registry.fly.io/work4you-cloud-runtime:deployment-01M0V3JSNBWV55F8MKSBEY7RVV'
+    'registry.fly.io/work4you-cloud-runtime:deployment-01M0V3JSNBVW55F8MKSBEY7RVV'
   )
 }
 
