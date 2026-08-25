@@ -264,8 +264,8 @@ export async function getMachine(
 export function agentImage(): string {
   return (
     process.env.WORK4YOU_AGENT_IMAGE ||
-    // Web chat separate React root (nested-router fix) 2026-08-25.
-    'registry.fly.io/work4you-cloud-runtime:deployment-01M0WK40ZRA5RV6TBMEKZF4F50'
+    // Web chat SidebarProvider fix 2026-08-25.
+    'registry.fly.io/work4you-cloud-runtime:deployment-01M0WPHE2Q4YN2T0JH5G7EYDDA'
   )
 }
 
