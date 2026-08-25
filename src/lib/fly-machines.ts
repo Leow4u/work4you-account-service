@@ -265,7 +265,7 @@ export function agentImage(): string {
   return (
     process.env.WORK4YOU_AGENT_IMAGE ||
     // Original PTY chat restored (revert of desktop-embed) 2026-08-25.
-    'registry.fly.io/work4you-cloud-runtime:deployment-01M0WZ6ZX8T53CWHF3HRB1543D'
+    'registry.fly.io/work4you-cloud-runtime:deployment-01M0X0CJK7XESMXDDM39SAZ3JW'
   )
 }
 
