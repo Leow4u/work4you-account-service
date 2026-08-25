@@ -264,8 +264,8 @@ export async function getMachine(
 export function agentImage(): string {
   return (
     process.env.WORK4YOU_AGENT_IMAGE ||
-    // Web chat desktop parity + golden image 2026-08-25.
-    'registry.fly.io/work4you-cloud-runtime:deployment-01M0WA8APS2K712EQPTKFAXYTN'
+    // Web chat separate React root (nested-router fix) 2026-08-25.
+    'registry.fly.io/work4you-cloud-runtime:deployment-01M0WK40ZRA5RV6TBMEKZF4F50'
   )
 }
 
