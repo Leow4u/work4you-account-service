@@ -513,7 +513,7 @@ export function CloudPage() {
                   <a
                     className={styles.primary}
                     href={
-                      agent.dashboardUrl.replace(/\/$/, '') + '/sessions'
+                      agent.dashboardUrl.replace(/\/$/, '') + '/chat'
                     }
                     target="_blank"
                     rel="noreferrer"
