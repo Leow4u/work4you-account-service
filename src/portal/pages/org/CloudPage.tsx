@@ -1,7 +1,7 @@
 'use client'
 
 import { usePrivy } from '@privy-io/react-auth'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { OrgPage } from '../../components/OrgPage'
 import styles from './CloudPage.module.css'
@@ -188,11 +188,6 @@ export function CloudPage() {
 
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
-
-  const selectedSize = useMemo(
-    () => sizes.find((s) => s.id === createSize) || sizes[0]!,
-    [sizes, createSize],
-  )
 
   const authHeaders = useCallback(async () => {
     const token = await getAccessToken()

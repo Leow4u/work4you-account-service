@@ -53,12 +53,26 @@ export type FlyApp = {
   status?: string
 }
 
+/** Machine config as returned/accepted by Fly Machines API. */
+export type FlyMachineConfig = {
+  image?: string
+  env?: Record<string, string>
+  guest?: { cpu_kind?: string; cpus?: number; memory_mb?: number }
+  init?: { cmd?: string[]; entrypoint?: string[]; exec?: string[] }
+  services?: unknown[]
+  mounts?: Array<{ volume: string; path: string; size_gb?: number }>
+  auto_destroy?: boolean
+  restart?: { policy?: string; max_retries?: number }
+  [key: string]: unknown
+}
+
 export type FlyMachine = {
   id: string
   name?: string
   state?: string
   region?: string
   instance_id?: string
+  config?: FlyMachineConfig
 }
 
 export type FlyVolume = {
@@ -66,6 +80,16 @@ export type FlyVolume = {
   name: string
   size_gb: number
   region: string
+}
+
+/** Compare image refs ignoring digest suffixes and case. */
+export function normalizeImageRef(image: string): string {
+  return image.split('@')[0]!.trim().toLowerCase()
+}
+
+export function imagesMatch(a: string, b: string): boolean {
+  if (!a || !b) return false
+  return normalizeImageRef(a) === normalizeImageRef(b)
 }
 
 export async function createFlyApp(name: string): Promise<FlyApp> {
@@ -260,11 +284,100 @@ export async function getMachine(
   )
 }
 
+/**
+ * In-place machine update (new golden image). Posts the full config from GET
+ * with only `image` changed — mounts/env/guest/services stay intact so
+ * `/opt/data` (sessions, memory, skills) survives. Never deletes the app.
+ *
+ * @see https://fly.io/docs/machines/api/machines-resource/#update-a-machine
+ */
+export async function updateMachine(args: {
+  appName: string
+  machineId: string
+  config: FlyMachineConfig
+  skip_launch?: boolean
+}): Promise<FlyMachine> {
+  return flyFetch(
+    `/apps/${encodeURIComponent(args.appName)}/machines/${encodeURIComponent(args.machineId)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        config: args.config,
+        ...(args.skip_launch != null
+          ? { skip_launch: args.skip_launch }
+          : {}),
+      }),
+    },
+  )
+}
+
+/**
+ * Roll a machine onto `targetImage` while keeping the data volume.
+ * Aborts if `/opt/data` mount is missing or volume id ≠ expected.
+ * No-ops when the machine already runs the target image.
+ */
+export async function rollMachineImage(args: {
+  appName: string
+  machineId: string
+  expectedVolumeId: string
+  targetImage: string
+  /** When true, do not start a stopped machine after the config write. */
+  skip_launch?: boolean
+}): Promise<{
+  previousImage: string
+  nextImage: string
+  changed: boolean
+  machine: FlyMachine
+}> {
+  const current = await getMachine(args.appName, args.machineId)
+  const config = current.config
+  if (!config || typeof config !== 'object') {
+    throw new Error('Máquina Fly sem config — não é seguro atualizar')
+  }
+  const mounts = Array.isArray(config.mounts) ? config.mounts : []
+  const dataMount = mounts.find((m) => m.path === '/opt/data')
+  if (!dataMount?.volume) {
+    throw new Error(
+      'Mount /opt/data em falta — abortar update para não perder dados',
+    )
+  }
+  if (dataMount.volume !== args.expectedVolumeId) {
+    throw new Error(
+      `Volume id diverge (machine=${dataMount.volume}, db=${args.expectedVolumeId}) — abortar`,
+    )
+  }
+  const previousImage = typeof config.image === 'string' ? config.image : ''
+  if (previousImage && imagesMatch(previousImage, args.targetImage)) {
+    return {
+      previousImage,
+      nextImage: previousImage,
+      changed: false,
+      machine: current,
+    }
+  }
+  const nextConfig: FlyMachineConfig = {
+    ...config,
+    image: args.targetImage,
+  }
+  const machine = await updateMachine({
+    appName: args.appName,
+    machineId: args.machineId,
+    config: nextConfig,
+    skip_launch: args.skip_launch,
+  })
+  return {
+    previousImage,
+    nextImage: args.targetImage,
+    changed: true,
+    machine,
+  }
+}
+
 /** Golden image for new agent VMs (deployed to work4you-cloud-runtime). */
 export function agentImage(): string {
   return (
     process.env.WORK4YOU_AGENT_IMAGE ||
-    // Original PTY chat restored (revert of desktop-embed) 2026-08-25.
+    // Pinned by fly-cloud-runtime deploy + NAS sync (in-place updates use this).
     'registry.fly.io/work4you-cloud-runtime:deployment-01M126K255WVTKAF2YDCN3Q93M'
   )
 }
