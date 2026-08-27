@@ -35,6 +35,9 @@ type AgentRow = {
   priceStoppedUsd: string
   errorMessage: string | null
   createdAt: string
+  pinnedImage?: string
+  runningImage?: string | null
+  updateAvailable?: boolean
 }
 
 const FALLBACK_SIZES: CloudSize[] = [
@@ -105,6 +108,8 @@ function statusLabel(status: string): string {
       return 'A provisionar'
     case 'starting':
       return 'A iniciar'
+    case 'updating':
+      return 'A atualizar'
     case 'online':
       return 'Online'
     case 'stopped':
@@ -134,16 +139,34 @@ function gatewayHint(state: string, status: string): string | null {
 
 function statusTone(status: string): string {
   if (status === 'online') return styles.toneOnline
-  if (status === 'starting' || status === 'provisioning') return styles.toneWarm
+  if (
+    status === 'starting' ||
+    status === 'provisioning' ||
+    status === 'updating'
+  ) {
+    return styles.toneWarm
+  }
   if (status === 'error') return styles.toneError
   return styles.toneMuted
 }
 
-function actionErrorLabel(action: 'start' | 'stop' | 'delete'): string {
+function actionErrorLabel(
+  action: 'start' | 'stop' | 'update' | 'delete',
+): string {
   if (action === 'start') return 'Não foi possível iniciar a instância.'
   if (action === 'stop') return 'Não foi possível parar a instância.'
+  if (action === 'update') {
+    return 'Não foi possível atualizar a instância (histórico preservado).'
+  }
   return 'Não foi possível apagar a instância.'
 }
+
+const TRANSIENT_STATUSES = [
+  'provisioning',
+  'starting',
+  'updating',
+  'deleting',
+] as const
 
 export function CloudPage() {
   const { orgId } = useParams()
@@ -230,7 +253,7 @@ export function CloudPage() {
 
   useEffect(() => {
     const pending = agents.some((a) =>
-      ['provisioning', 'starting', 'deleting'].includes(a.status),
+      (TRANSIENT_STATUSES as readonly string[]).includes(a.status),
     )
     if (!pending) return
     const t = setInterval(() => void load({ silent: true }), 4000)
@@ -310,14 +333,23 @@ export function CloudPage() {
     }
   }
 
-  const runAction = async (id: string, action: 'start' | 'stop' | 'delete') => {
+  const runAction = async (
+    id: string,
+    action: 'start' | 'stop' | 'update' | 'delete',
+  ) => {
     setBusyId(id)
     setError(null)
     try {
       const headers = await authHeaders()
       if (!headers) return
       if (action === 'delete') {
-        if (!confirm('Apagar esta instância e a VM no Fly?')) return
+        if (
+          !confirm(
+            'Apagar esta instância destrói a VM e o disco (/opt/data). Sessões, memória e skills desta instância serão perdidos. Para atualizar o runtime sem perder histórico, use Atualizar.',
+          )
+        ) {
+          return
+        }
         const res = await fetch(`/api/agents/${id}${orgQuery}`, {
           method: 'DELETE',
           headers,
@@ -327,13 +359,27 @@ export function CloudPage() {
           return
         }
       } else {
+        if (action === 'update') {
+          if (
+            !confirm(
+              'Atualizar o runtime desta instância? O histórico (sessões, memória, skills) no disco é preservado.',
+            )
+          ) {
+            return
+          }
+        }
         const res = await fetch(`/api/agents/${id}/${action}`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ org: orgId }),
         })
         if (!res.ok) {
-          setError(actionErrorLabel(action))
+          const body = await res.json().catch(() => ({}))
+          setError(
+            typeof body?.message === 'string'
+              ? body.message
+              : actionErrorLabel(action),
+          )
           return
         }
       }
@@ -378,7 +424,7 @@ export function CloudPage() {
     <OrgPage
       eyebrow="Work4You Cloud"
       title="Instâncias"
-      lead="Agent hospedado pela Work4You. Crie uma VM, acompanhe o estado e abra o dashboard."
+      lead="Agent hospedado pela Work4You. Crie uma VM, acompanhe o estado e abra o dashboard. Atualizações de runtime aplicam a image nova sem apagar o disco — o histórico permanece."
     >
       <section className={styles.toolbar}>
         <p className={styles.sectionLead}>{instanceCountLabel}</p>
@@ -456,6 +502,12 @@ export function CloudPage() {
               {agent.model ? (
                 <p className={styles.cardModel}>{agent.model}</p>
               ) : null}
+              {agent.updateAvailable ? (
+                <p className={styles.cardWarn}>
+                  Atualização de runtime disponível — o histórico no disco é
+                  preservado.
+                </p>
+              ) : null}
               {hint ? <p className={styles.cardWarn}>{hint}</p> : null}
               {agent.errorMessage ? (
                 <p className={styles.cardError}>{agent.errorMessage}</p>
@@ -493,7 +545,7 @@ export function CloudPage() {
                     className={styles.ghost}
                     disabled={
                       busyId === agent.id ||
-                      ['provisioning', 'starting', 'deleting'].includes(
+                      (TRANSIENT_STATUSES as readonly string[]).includes(
                         agent.status,
                       )
                     }
@@ -502,6 +554,21 @@ export function CloudPage() {
                     Parar
                   </button>
                 )}
+                {agent.updateAvailable ? (
+                  <button
+                    type="button"
+                    className={styles.ghost}
+                    disabled={
+                      busyId === agent.id ||
+                      (TRANSIENT_STATUSES as readonly string[]).includes(
+                        agent.status,
+                      )
+                    }
+                    onClick={() => void runAction(agent.id, 'update')}
+                  >
+                    Atualizar
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={styles.danger}

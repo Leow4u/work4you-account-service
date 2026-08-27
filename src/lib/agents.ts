@@ -20,6 +20,8 @@ import {
   deleteFlyApp,
   destroyMachine,
   getMachine,
+  imagesMatch,
+  rollMachineImage,
   startMachine,
   stopMachine,
   waitMachine,
@@ -54,9 +56,18 @@ export type AgentDto = {
   errorMessage: string | null
   createdAt: string
   updatedAt: string
+  /** Portal-pinned golden image (new creates + in-place updates). */
+  pinnedImage: string
+  /** Image currently configured on the Fly machine, if known. */
+  runningImage: string | null
+  /** True when runningImage differs from pinnedImage — history-safe update available. */
+  updateAvailable: boolean
 }
 
-export function toAgentDto(row: AgentInstance): AgentDto {
+function baseAgentDto(row: AgentInstance): Omit<
+  AgentDto,
+  'pinnedImage' | 'runningImage' | 'updateAvailable'
+> {
   return {
     id: row.id,
     name: row.name,
@@ -80,6 +91,40 @@ export function toAgentDto(row: AgentInstance): AgentDto {
   }
 }
 
+/** Sync DTO without a live Fly image probe (tests / error paths). */
+export function toAgentDto(
+  row: AgentInstance,
+  opts?: { runningImage?: string | null },
+): AgentDto {
+  const pinnedImage = agentImage()
+  const runningImage =
+    opts?.runningImage === undefined ? null : opts.runningImage
+  const updateAvailable = Boolean(
+    runningImage && !imagesMatch(runningImage, pinnedImage),
+  )
+  return {
+    ...baseAgentDto(row),
+    pinnedImage,
+    runningImage,
+    updateAvailable,
+  }
+}
+
+/** DTO + live Fly `config.image` so the Portal can show “Atualização disponível”. */
+export async function toAgentDtoLive(row: AgentInstance): Promise<AgentDto> {
+  let runningImage: string | null = null
+  if (row.flyAppName && row.flyMachineId) {
+    try {
+      const m = await getMachine(row.flyAppName, row.flyMachineId)
+      runningImage =
+        typeof m.config?.image === 'string' ? m.config.image : null
+    } catch {
+      runningImage = null
+    }
+  }
+  return toAgentDto(row, { runningImage })
+}
+
 function slugify(name: string): string {
   const base = name
     .toLowerCase()
@@ -98,13 +143,19 @@ function flyAppNameForSlug(slug: string): string {
   return `w4y-agent-${slug}`.slice(0, 63)
 }
 
-const FLY_REFRESH_STATUSES = new Set(['provisioning', 'starting', 'deleting'])
+const FLY_REFRESH_STATUSES = new Set([
+  'provisioning',
+  'starting',
+  'updating',
+  'deleting',
+])
 
 function agentNeedsFlyRefresh(row: AgentInstance): boolean {
   if (!row.flyAppName || !row.flyMachineId) return false
   if (FLY_REFRESH_STATUSES.has(row.status)) return true
   // waitMachine timeout: Fly may already be started while DB still says starting.
   if (row.status === 'starting' && row.errorMessage) return true
+  if (row.status === 'updating' && row.errorMessage) return true
   return false
 }
 
@@ -118,7 +169,7 @@ export async function listAgents(orgId: string): Promise<AgentDto[]> {
       if (agentNeedsFlyRefresh(row)) {
         return refreshAgentStatus(row)
       }
-      return toAgentDto(row)
+      return toAgentDtoLive(row)
     }),
   )
 }
@@ -301,9 +352,14 @@ export async function stopAgent(row: AgentInstance): Promise<AgentDto> {
       dashboardGatewayState: 'down',
     },
   })
-  return toAgentDto(updated)
+  return toAgentDtoLive(updated)
 }
 
+/**
+ * Start the Fly machine. If the machine still runs an older golden image,
+ * roll the image in-place first (same volume / history) — Cursor/Claude-style
+ * silent upgrade on wake, without delete+recreate.
+ */
 export async function startAgent(row: AgentInstance): Promise<AgentDto> {
   if (!row.flyAppName || !row.flyMachineId) {
     throw new Error('Instância sem máquina Fly')
@@ -312,7 +368,36 @@ export async function startAgent(row: AgentInstance): Promise<AgentDto> {
     where: { id: row.id },
     data: { status: 'starting', dashboardGatewayState: 'unknown' },
   })
-  await startMachine(row.flyAppName, row.flyMachineId)
+
+  const target = agentImage()
+  const machine = await getMachine(row.flyAppName, row.flyMachineId)
+  const currentImage =
+    typeof machine.config?.image === 'string' ? machine.config.image : ''
+  const needsImageRoll =
+    !currentImage || !imagesMatch(currentImage, target)
+
+  if (needsImageRoll) {
+    if (!row.flyVolumeId) {
+      throw new Error(
+        'Volume em falta — não é seguro atualizar a image sem /opt/data',
+      )
+    }
+    await prisma.agentInstance.update({
+      where: { id: row.id },
+      data: { status: 'updating', dashboardGatewayState: 'unknown' },
+    })
+    // Machine is stopped on the start path; skip_launch=false boots with new image.
+    await rollMachineImage({
+      appName: row.flyAppName,
+      machineId: row.flyMachineId,
+      expectedVolumeId: row.flyVolumeId,
+      targetImage: target,
+      skip_launch: false,
+    })
+  } else {
+    await startMachine(row.flyAppName, row.flyMachineId)
+  }
+
   try {
     await waitMachine(row.flyAppName, row.flyMachineId, 'started', 60)
   } catch {
@@ -321,6 +406,95 @@ export async function startAgent(row: AgentInstance): Promise<AgentDto> {
   return refreshAgentStatus(
     (await prisma.agentInstance.findUnique({ where: { id: row.id } })) ?? row,
   )
+}
+
+/**
+ * In-place golden-image update. Preserves the Fly app + volume (`/opt/data`):
+ * sessions, memory, skills, and config survive. Never calls deleteFlyApp.
+ *
+ * Online → drain → roll image → wait started.
+ * Stopped → roll image with skip_launch (stays stopped, ready on next Iniciar).
+ */
+export async function updateAgentImage(row: AgentInstance): Promise<AgentDto> {
+  if (!row.flyAppName || !row.flyMachineId) {
+    throw new Error('Instância sem máquina Fly')
+  }
+  if (!row.flyVolumeId) {
+    throw new Error(
+      'Volume em falta — não é seguro atualizar sem preservar /opt/data',
+    )
+  }
+
+  const target = agentImage()
+  const machine = await getMachine(row.flyAppName, row.flyMachineId)
+  const state = (machine.state || '').toLowerCase()
+  const currentImage =
+    typeof machine.config?.image === 'string' ? machine.config.image : ''
+  if (currentImage && imagesMatch(currentImage, target)) {
+    // Already on pin — nothing to do (history untouched).
+    return toAgentDto(row, { runningImage: currentImage })
+  }
+
+  const wasOnline = state === 'started' || row.status === 'online'
+  await prisma.agentInstance.update({
+    where: { id: row.id },
+    data: {
+      status: 'updating',
+      dashboardGatewayState: wasOnline ? 'unknown' : row.dashboardGatewayState,
+      errorMessage: null,
+    },
+  })
+
+  try {
+    if (wasOnline) {
+      await drainAgentGateway(row)
+    }
+    const rolled = await rollMachineImage({
+      appName: row.flyAppName,
+      machineId: row.flyMachineId,
+      expectedVolumeId: row.flyVolumeId,
+      targetImage: target,
+      skip_launch: !wasOnline,
+    })
+    if (!rolled.changed) {
+      const updated = await prisma.agentInstance.update({
+        where: { id: row.id },
+        data: {
+          status: wasOnline ? 'online' : 'stopped',
+          dashboardGatewayState: wasOnline ? 'active' : 'down',
+        },
+      })
+      return toAgentDto(updated, { runningImage: rolled.nextImage })
+    }
+    if (wasOnline) {
+      try {
+        await waitMachine(row.flyAppName, row.flyMachineId, 'started', 60)
+      } catch {
+        // refresh reconciles
+      }
+      return refreshAgentStatus(
+        (await prisma.agentInstance.findUnique({ where: { id: row.id } })) ??
+          row,
+      )
+    }
+    const updated = await prisma.agentInstance.update({
+      where: { id: row.id },
+      data: { status: 'stopped', dashboardGatewayState: 'down' },
+    })
+    return toAgentDto(updated, { runningImage: rolled.nextImage })
+  } catch (e) {
+    const msg =
+      e instanceof Error ? e.message.slice(0, 500) : 'update image failed'
+    const updated = await prisma.agentInstance.update({
+      where: { id: row.id },
+      data: {
+        status: 'error',
+        dashboardGatewayState: 'down',
+        errorMessage: msg,
+      },
+    })
+    return toAgentDto(updated, { runningImage: currentImage || null })
+  }
 }
 
 export async function deleteAgent(row: AgentInstance): Promise<void> {
@@ -350,6 +524,8 @@ export async function refreshAgentStatus(
   try {
     const m = await getMachine(row.flyAppName, row.flyMachineId)
     const state = (m.state || '').toLowerCase()
+    const runningImage =
+      typeof m.config?.image === 'string' ? m.config.image : null
     let status = row.status
     let gateway = row.dashboardGatewayState
     if (state === 'started') {
@@ -360,6 +536,10 @@ export async function refreshAgentStatus(
       gateway = 'down'
     } else if (state === 'created' || state === 'starting') {
       status = 'starting'
+      gateway = 'unknown'
+    } else if (state === 'replacing' || state === 'destroying') {
+      // Mid-roll: keep updating so the Portal keeps polling.
+      status = row.status === 'updating' ? 'updating' : 'starting'
       gateway = 'unknown'
     }
     const patch: {
@@ -377,7 +557,7 @@ export async function refreshAgentStatus(
       where: { id: row.id },
       data: patch,
     })
-    return toAgentDto(updated)
+    return toAgentDto(updated, { runningImage })
   } catch {
     return toAgentDto(row)
   }

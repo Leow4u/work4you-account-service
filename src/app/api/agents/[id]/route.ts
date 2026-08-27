@@ -3,8 +3,6 @@ import {
   deleteAgent,
   getAgent,
   refreshAgentStatus,
-  startAgent,
-  stopAgent,
   toAgentDto,
 } from '@/lib/agents'
 import { resolvePortalOrg } from '@/lib/request-auth'
@@ -18,7 +16,7 @@ type Ctx = { params: Promise<{ id: string }> }
 /**
  * GET /api/agents/:id — detail + refresh Fly state
  * PATCH — rename { name }
- * DELETE — destroy Fly app + DB row
+ * DELETE — destroy Fly app + DB row (destroys volume / history — not an update)
  */
 export async function GET(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params
