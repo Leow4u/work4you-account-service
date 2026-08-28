@@ -50,7 +50,7 @@
 .primary {
   border: none;
   background: var(--oliva);
-  color: #f5f4ee;
+  color: #faf9f5;
 }
 
 .primary:hover {
@@ -86,7 +86,7 @@
   padding: 0.75rem 1rem;
   border-radius: 8px;
   background: var(--tinta);
-  color: #f5f4ee;
+  color: #faf9f5;
   font-size: 0.875rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
