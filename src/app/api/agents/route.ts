@@ -8,6 +8,7 @@ import {
   fetchAnnotatedModelsForOrg,
   resolveProvisionModel,
 } from '@/lib/inference-catalog'
+import { HOUSE_MODEL_ID } from '@/lib/model-access'
 import { resolvePortalOrg } from '@/lib/request-auth'
 
 export const runtime = 'nodejs'
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
   if (!('error' in catalog)) {
     model = resolveProvisionModel(catalog, model)
   } else if (!model) {
-    model = 'openrouter/free'
+    model = HOUSE_MODEL_ID
   }
 
   const agent = await createAndProvisionAgent({

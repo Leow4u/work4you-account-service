@@ -8,6 +8,9 @@ import { buildPaidServiceAccess } from './account-entitlement'
 import { getTier } from './tiers'
 import {
   annotateModels,
+  HOUSE_MODEL_DISPLAY,
+  isHouseModel,
+  OFFICIAL_WORK4YOU_MODEL_IDS,
   orgHasPaidPlan,
   pickDefaultUnlocked,
   type AnnotatedModel,
@@ -70,15 +73,21 @@ export async function fetchAnnotatedModelsForOrg(args: {
     return { error: 'catalog_unavailable', status: upstream.status }
   }
 
+  const liveById = new Map(
+    (raw.data || [])
+      .filter((m) => typeof m.id === 'string' && m.id)
+      .map((m) => [String(m.id), m]),
+  )
   const models = annotateModels({
     paidPlan,
-    models: (raw.data || [])
-      .filter((m) => typeof m.id === 'string' && m.id)
-      .map((m) => ({
-        id: m.id as string,
-        name: m.name,
-        pricing: m.pricing,
-      })),
+    models: OFFICIAL_WORK4YOU_MODEL_IDS.map((id) => {
+      const live = liveById.get(id)
+      return {
+        id,
+        name: isHouseModel(id) ? HOUSE_MODEL_DISPLAY : live?.name || id,
+        pricing: live?.pricing,
+      }
+    }),
   })
 
   return {

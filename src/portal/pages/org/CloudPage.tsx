@@ -84,7 +84,12 @@ type AnnotatedModelOption = {
 }
 
 const FALLBACK_MODELS: AnnotatedModelOption[] = [
-  { id: 'openrouter/free', name: 'openrouter/free', free: true, locked: false },
+  {
+    id: 'deepseek/deepseek-v4-flash-0731',
+    name: 'Operis 4.0 Flash',
+    free: false,
+    locked: false,
+  },
 ]
 
 const SIZE_LABELS: Record<string, string> = {

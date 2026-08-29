@@ -1,62 +1,66 @@
 import { NextResponse } from 'next/server'
 
+import {
+  HOUSE_MODEL_ID,
+  OFFICIAL_PAID_COMPACTION_MODEL,
+  OFFICIAL_PAID_VISION_MODEL,
+  OFFICIAL_WORK4YOU_MODEL_IDS,
+  officialModelDisplayName,
+} from '@/lib/model-access'
+
 export const runtime = 'nodejs'
+
+function catalogEntry(
+  modelName: string,
+  position: number,
+  now: string,
+  tokenPrice: string | null,
+) {
+  return {
+    modelName,
+    displayName: officialModelDisplayName(modelName),
+    source: 'local',
+    href: null,
+    tokenPrice,
+    contextLength: null,
+    inputModalities: [] as string[],
+    outputModalities: [] as string[],
+    position,
+    isVisionModel: false,
+    isCompactionModel: false,
+    updatedAt: now,
+  }
+}
 
 /**
  * GET /api/work4you/recommended-models
- * Public catalog hints for CLI/Desktop free vs paid pickers (Hermes shape).
- * Live free set is still priced via inference /v1/models; this list is curated.
+ * Official Work4You catalog hints for CLI/Desktop pickers.
+ * Free: Operis only. Paid: the 31-id manifesto.
  */
 export async function GET() {
   const now = new Date().toISOString()
-  const freeRecommendedModels = [
-    'openrouter/free',
-    'deepseek/deepseek-chat:free',
-    'google/gemma-3-27b-it:free',
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'mistralai/mistral-small-3.1-24b-instruct:free',
-  ].map((modelName, position) => ({
-    modelName,
-    displayName: modelName,
-    source: 'local',
-    href: null,
-    tokenPrice: '$0.00/1M',
-    contextLength: null,
-    inputModalities: [] as string[],
-    outputModalities: [] as string[],
-    position,
-    isVisionModel: false,
-    isCompactionModel: false,
-    updatedAt: now,
-  }))
+  const freeRecommendedModels = [HOUSE_MODEL_ID].map((modelName, position) =>
+    catalogEntry(modelName, position, now, null),
+  )
 
-  const paidRecommendedModels = [
-    'openai/gpt-4o-mini',
-    'google/gemini-2.5-flash',
-    'anthropic/claude-sonnet-4',
-    'deepseek/deepseek-chat',
-    'deepseek/deepseek-v4-flash',
-    ...freeRecommendedModels.map((m) => m.modelName),
-  ].map((modelName, position) => ({
-    modelName,
-    displayName: modelName,
-    source: 'local',
-    href: null,
-    tokenPrice: null as string | null,
-    contextLength: null,
-    inputModalities: [] as string[],
-    outputModalities: [] as string[],
-    position,
-    isVisionModel: false,
-    isCompactionModel: false,
-    updatedAt: now,
-  }))
+  const paidRecommendedModels = OFFICIAL_WORK4YOU_MODEL_IDS.map((modelName, position) =>
+    catalogEntry(modelName, position, now, null),
+  )
+
+  const paidVision =
+    paidRecommendedModels.find((m) => m.modelName === OFFICIAL_PAID_VISION_MODEL) ||
+    paidRecommendedModels[0] ||
+    null
+  const paidCompaction =
+    paidRecommendedModels.find((m) => m.modelName === OFFICIAL_PAID_COMPACTION_MODEL) ||
+    paidRecommendedModels[0] ||
+    null
 
   return NextResponse.json({
     paidRecommendedModels,
     freeRecommendedModels,
-    paidRecommendedVisionModel: paidRecommendedModels[1] || null,
-    paidRecommendedCompactionModel: paidRecommendedModels[0] || null,
+    paidRecommendedVisionModel: paidVision,
+    paidRecommendedCompactionModel: paidCompaction,
     freeRecommendedVisionModel: freeRecommendedModels[0] || null,
     freeRecommendedCompactionModel: freeRecommendedModels[0] || null,
   })
