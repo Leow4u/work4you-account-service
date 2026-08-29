@@ -35,7 +35,7 @@ function catalogEntry(
 /**
  * GET /api/work4you/recommended-models
  * Official Work4You catalog hints for CLI/Desktop pickers.
- * Free: Operis only. Paid: the 31-id manifesto.
+ * Free: Operis only. Paid: the official Work4You catalog.
  */
 export async function GET() {
   const now = new Date().toISOString()

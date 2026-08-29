@@ -19,8 +19,9 @@ export type AnnotatedModel = {
 export const HOUSE_MODEL_ID = 'deepseek/deepseek-v4-flash-0731'
 export const HOUSE_MODEL_DISPLAY = 'Operis 4.0 Flash'
 
-/** Official Work4You catalog — same 31 ids as `_PROVIDER_MODELS["work4you"]`. */
+/** Official Work4You catalog — same as `_PROVIDER_MODELS["work4you"]`. */
 export const OFFICIAL_WORK4YOU_MODEL_IDS: readonly string[] = [
+  'deepseek/deepseek-v4-flash-0731',
   'anthropic/claude-fable-5',
   'anthropic/claude-opus-5',
   'anthropic/claude-opus-4.8',
@@ -38,10 +39,6 @@ export const OFFICIAL_WORK4YOU_MODEL_IDS: readonly string[] = [
   'google/gemini-3.1-pro-preview',
   'google/gemini-3.7-flash',
   'x-ai/grok-4.6',
-  'deepseek/deepseek-v4-pro',
-  'deepseek/deepseek-v4-pro-0813',
-  'deepseek/deepseek-v4-flash',
-  'deepseek/deepseek-v4-flash-0731',
   'qwen/qwen3.8-max',
   'moonshotai/kimi-k3',
   'minimax/minimax-m3',
