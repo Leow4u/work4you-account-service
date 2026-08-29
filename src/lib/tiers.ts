@@ -19,7 +19,7 @@ export const TIER_CATALOG: TierDef[] = [
     name: 'Free',
     tierOrder: 0,
     dollarsPerMonth: '0',
-    monthlyCredits: '0.10',
+    monthlyCredits: '5',
   },
   {
     tierId: 'plus',
@@ -121,4 +121,36 @@ export function defaultCycleEnd(from = new Date()): Date {
   const d = new Date(from)
   d.setUTCDate(d.getUTCDate() + 30)
   return d
+}
+
+/** Previous Free grant before the hidden $5 monthly allowance. */
+export const LEGACY_FREE_MONTHLY_CREDITS = '0.10'
+
+export function isFreeTierId(id: string | null | undefined): boolean {
+  return !id || id === 'free'
+}
+
+/** Free cycle ended (or is due now) — refill the hidden monthly grant. */
+export function shouldRolloverFreeCycle(
+  tierId: string | null | undefined,
+  cycleEndsAt: Date | null | undefined,
+  now = new Date(),
+): boolean {
+  if (!isFreeTierId(tierId)) return false
+  if (!cycleEndsAt) return false
+  return cycleEndsAt.getTime() <= now.getTime()
+}
+
+/**
+ * Unused leftover of the old $0.10 Free seed — lift to the current Free grant.
+ * Skip if the org already spent this cycle (they wait for rollover).
+ */
+export function shouldUpgradeLegacyFreeGrant(params: {
+  creditsUsd?: string | null
+  spentThisPeriodUsd?: string | null
+  tierId?: string | null
+}): boolean {
+  if (!isFreeTierId(params.tierId)) return false
+  if (moneyCmp(params.spentThisPeriodUsd || '0', '0') !== 0) return false
+  return moneyCmp(params.creditsUsd || '0', LEGACY_FREE_MONTHLY_CREDITS) === 0
 }

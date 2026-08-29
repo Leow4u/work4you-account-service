@@ -76,6 +76,57 @@ export function formatUsdDisplay(raw: string): string {
   return `$${n.toFixed(2)}`
 }
 
+/**
+ * True only when the Portal plan is positively Free. Unknown stays false so
+ * paid dollar surfaces remain visible. NAS Free is `current: null` plus
+ * `subscriptionTierId === 'free'` / `planName === 'Free'`.
+ */
+export function isFreePlanPayload(
+  billing?: Pick<BillingStatePayload, 'planName' | 'subscriptionTierId'> | null,
+  subscription?: Pick<SubscriptionStatePayload, 'current'> | null,
+): boolean {
+  const current = subscription?.current
+  if (current?.tierId && current.tierId !== 'free') return false
+  const plan = (current?.tierName || billing?.planName || '').trim().toLowerCase()
+  if (plan && plan !== 'free') return false
+  if (current?.tierId === 'free' || plan === 'free') return true
+  if (billing?.subscriptionTierId && billing.subscriptionTierId !== 'free') {
+    return false
+  }
+  if (billing?.subscriptionTierId === 'free') return true
+  return subscription != null && current == null
+}
+
+/** Boolean only — never print the hidden Free grant in dollars. */
+export function freeAllowanceUsedUp(balanceUsd?: string | null): boolean {
+  const n = Number(balanceUsd)
+  return Number.isFinite(n) && n <= 0
+}
+
+export function isFreeCatalogTier(tier: {
+  tierId?: string
+  name?: string
+}): boolean {
+  if ((tier.name || '').trim().toLowerCase() === 'free') return true
+  return (tier.tierId || '').trim().toLowerCase() === 'free'
+}
+
+/** Paid tiles keep price + included credits. Free never names the grant. */
+export function catalogTierCopy(tier: {
+  tierId: string
+  name: string
+  dollarsPerMonthDisplay: string
+  monthlyCredits: string
+}): { bonus: string | null; title: string } {
+  if (isFreeCatalogTier(tier)) {
+    return { bonus: 'Allowance mensal', title: tier.name }
+  }
+  return {
+    bonus: `${formatUsdDisplay(tier.monthlyCredits)} créditos mensais`,
+    title: `${tier.name} (${formatUsdDisplay(tier.dollarsPerMonthDisplay)}/mês)`,
+  }
+}
+
 export function formatCycleDate(iso: string | null): string {
   if (!iso) return '—'
   try {

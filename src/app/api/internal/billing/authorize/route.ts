@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { buildPaidServiceAccess, orgHasUsableCredits } from '@/lib/account-entitlement'
+import { ensureBillingDefaults } from '@/lib/org-billing'
 import { getTier, TIER_RATE_LIMITS } from '@/lib/tiers'
 import { orgHasPaidPlan } from '@/lib/model-access'
 
@@ -31,11 +32,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
   }
 
-  const org = await prisma.org.findUnique({ where: { id: orgId } })
-  if (!org) {
+  const existing = await prisma.org.findUnique({ where: { id: orgId } })
+  if (!existing) {
     return NextResponse.json({ error: 'org_not_found' }, { status: 404 })
   }
 
+  // Roll a due Free cycle before the credit wall so next-month access
+  // does not wait on a Portal page load.
+  const org = await ensureBillingDefaults(orgId)
   const access = buildPaidServiceAccess(org)
   const tier = getTier(org.subscriptionTierId || 'free')
   const paidPlan = orgHasPaidPlan(org)

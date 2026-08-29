@@ -3,7 +3,7 @@
 import { usePrivy } from '@privy-io/react-auth'
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
-import { formatUsdDisplay } from '@/lib/billing-client'
+import { formatUsdDisplay, isFreePlanPayload } from '@/lib/billing-client'
 import { displayName } from '../lib/auth-display'
 import { PORTAL_NAV, navPath } from '../lib/portal-nav'
 import styles from './PortalShell.module.css'
@@ -14,10 +14,12 @@ export function PortalShell() {
   const navigate = useNavigate()
   const name = user ? displayName(user) : 'Conta'
   const [balance, setBalance] = useState<string | null>(null)
+  const [planFree, setPlanFree] = useState(false)
 
   const loadBalance = useCallback(async () => {
     if (!authenticated) {
       setBalance(null)
+      setPlanFree(false)
       return
     }
     try {
@@ -27,8 +29,18 @@ export function PortalShell() {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) return
-      const data = (await res.json()) as { balanceUsd?: string }
+      const data = (await res.json()) as {
+        balanceUsd?: string
+        planName?: string
+        subscriptionTierId?: string
+      }
       if (typeof data.balanceUsd === 'string') setBalance(data.balanceUsd)
+      setPlanFree(
+        isFreePlanPayload({
+          planName: data.planName || '',
+          subscriptionTierId: data.subscriptionTierId || '',
+        }),
+      )
     } catch {
       /* keep previous */
     }
@@ -52,10 +64,10 @@ export function PortalShell() {
           <p className={styles.accountMeta}>Conta pessoal</p>
         </div>
 
-        <div className={styles.balance} aria-label="Saldo">
-          <span className={styles.balanceLabel}>Saldo</span>
+        <div className={styles.balance} aria-label={planFree ? 'Plano' : 'Saldo'}>
+          <span className={styles.balanceLabel}>{planFree ? 'Plano' : 'Saldo'}</span>
           <span className={styles.balanceValue}>
-            {balance == null ? '…' : formatUsdDisplay(balance)}
+            {balance == null ? '…' : planFree ? 'Free' : formatUsdDisplay(balance)}
           </span>
           <button
             type="button"

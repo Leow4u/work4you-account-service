@@ -5,8 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { OrgPage } from '../../components/OrgPage'
 import {
+  catalogTierCopy,
   formatCycleDate,
   formatUsdDisplay,
+  freeAllowanceUsedUp,
+  isFreePlanPayload,
   type BillingStatePayload,
   type SubscriptionStatePayload,
 } from '@/lib/billing-client'
@@ -304,16 +307,18 @@ export function BillingPage() {
     }
   }
 
+  const isFree = isFreePlanPayload(billing, subscription)
   const lowBalance = useMemo(() => {
-    if (!billing) return false
+    if (!billing || isFreePlanPayload(billing, subscription)) return false
     return Number(billing.balanceUsd) < 5
-  }, [billing])
+  }, [billing, subscription])
 
   const cycleLabel = formatCycleDate(billing?.cycleEndsAt ?? null)
   const total = Number(billing?.balanceUsd || 0)
   const spent = Number(billing?.spentThisPeriodUsd || 0)
   const barTotal = Math.max(total + spent, 0.01)
   const fillPct = Math.min(100, Math.round((total / barTotal) * 100))
+  const allowanceUsed = freeAllowanceUsedUp(billing?.balanceUsd)
 
   return (
     <div className={styles.wrap}>
@@ -322,7 +327,7 @@ export function BillingPage() {
 
         <section className={styles.hero}>
           <p className={styles.heroBalance}>
-            {loading ? '…' : formatUsdDisplay(billing?.balanceUsd || '0')}
+            {loading ? '…' : isFree ? 'Free' : formatUsdDisplay(billing?.balanceUsd || '0')}
           </p>
           {lowBalance && !loading ? (
             <p className={styles.low}>Saldo baixo</p>
@@ -334,18 +339,36 @@ export function BillingPage() {
             <h2 id="breakdown-title" className={styles.cardTitle}>
               Detalhe do saldo
             </h2>
-            <span className={styles.cycle}>Ciclo até {cycleLabel}</span>
+            <span className={styles.cycle}>
+              {isFree ? `Reinicia ${cycleLabel}` : `Ciclo até ${cycleLabel}`}
+            </span>
           </div>
 
           <div className={styles.barTrack} aria-hidden>
             <div className={styles.barFill} style={{ width: `${fillPct}%` }} />
-            {spent > 0 ? (
+            {spent > 0 && !isFree ? (
               <span className={styles.barSpent}>
                 −{formatUsdDisplay(String(spent))}
               </span>
             ) : null}
           </div>
 
+          {isFree ? (
+            <ul className={styles.rows}>
+              <li>
+                <span className={`${styles.dot} ${styles.dotBlue}`} />
+                <div className={styles.rowMain}>
+                  <strong>Allowance deste mês</strong>
+                  <span className={styles.rowMeta}>Reinicia {cycleLabel}</span>
+                </div>
+                <div className={styles.rowRight}>
+                  <strong>
+                    {allowanceUsed ? 'Usada neste ciclo' : 'Disponível'}
+                  </strong>
+                </div>
+              </li>
+            </ul>
+          ) : (
           <ul className={styles.rows}>
             <li>
               <span className={`${styles.dot} ${styles.dotGreen}`} />
@@ -399,6 +422,7 @@ export function BillingPage() {
               </div>
             </li>
           </ul>
+          )}
         </section>
 
         <div className={styles.grid2}>
@@ -442,21 +466,32 @@ export function BillingPage() {
             <div className={styles.planRow}>
               <div>
                 <p className={styles.planName}>
-                  {subscription?.current?.tierName || billing?.planName || 'Free'}
+                  {isFree
+                    ? 'Free'
+                    : subscription?.current?.tierName || billing?.planName || 'Free'}
                 </p>
-                <p className={styles.rowMeta}>
-                  {formatUsdDisplay(
-                    subscription?.tiers.find((t) => t.isCurrent)
-                      ?.dollarsPerMonthDisplay || '0',
-                  )}
-                  /mês ·{' '}
-                  {formatUsdDisplay(
-                    subscription?.current?.monthlyCredits ||
-                      (billing?.subscriptionTierId === 'free' ? '0.10' : '0'),
-                  )}{' '}
-                  créditos
-                </p>
-                <p className={styles.rowMeta}>Renova {cycleLabel}</p>
+                {isFree ? (
+                  <p className={styles.rowMeta}>
+                    {cycleLabel !== '—'
+                      ? `Allowance reinicia ${cycleLabel}`
+                      : 'Free'}
+                  </p>
+                ) : (
+                  <>
+                    <p className={styles.rowMeta}>
+                      {formatUsdDisplay(
+                        subscription?.tiers.find((t) => t.isCurrent)
+                          ?.dollarsPerMonthDisplay || '0',
+                      )}
+                      /mês ·{' '}
+                      {formatUsdDisplay(
+                        subscription?.current?.monthlyCredits || '0',
+                      )}{' '}
+                      créditos
+                    </p>
+                    <p className={styles.rowMeta}>Renova {cycleLabel}</p>
+                  </>
+                )}
               </div>
               <button
                 type="button"
@@ -573,15 +608,14 @@ export function BillingPage() {
                   subscription.tiers.find((x) => x.isCurrent)?.tierOrder ?? 0
                 const isDowngrade =
                   Boolean(subscription.current) && t.tierOrder < currentOrder
+                const copy = catalogTierCopy(t)
                 return (
                   <li key={t.tierId}>
                     <div>
-                      <strong>
-                        {t.name} ({formatUsdDisplay(t.dollarsPerMonthDisplay)}/mês)
-                      </strong>
-                      <span className={styles.bonus}>
-                        {formatUsdDisplay(t.monthlyCredits)} créditos mensais
-                      </span>
+                      <strong>{copy.title}</strong>
+                      {copy.bonus ? (
+                        <span className={styles.bonus}>{copy.bonus}</span>
+                      ) : null}
                     </div>
                     <button
                       type="button"

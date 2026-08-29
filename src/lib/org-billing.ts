@@ -1,7 +1,12 @@
 import { prisma } from './db'
-import { defaultCycleEnd, getTier } from './tiers'
+import {
+  defaultCycleEnd,
+  getTier,
+  shouldRolloverFreeCycle,
+  shouldUpgradeLegacyFreeGrant,
+} from './tiers'
 
-/** Ensure Free-tier defaults exist on an org row. */
+/** Ensure Free-tier defaults exist on an org row, then roll the Free cycle if due. */
 export async function ensureBillingDefaults(orgId: string) {
   const org = await prisma.org.findUniqueOrThrow({ where: { id: orgId } })
   const patch: Record<string, unknown> = {}
@@ -13,7 +18,47 @@ export async function ensureBillingDefaults(orgId: string) {
     org.subscriptionCreditsUsd === ''
   ) {
     patch.subscriptionCreditsUsd = getTier('free').monthlyCredits
+  } else if (
+    shouldUpgradeLegacyFreeGrant({
+      tierId: org.subscriptionTierId || 'free',
+      creditsUsd: org.subscriptionCreditsUsd,
+      spentThisPeriodUsd: org.spentThisPeriodUsd,
+    })
+  ) {
+    patch.subscriptionCreditsUsd = getTier('free').monthlyCredits
   }
-  if (Object.keys(patch).length === 0) return org
-  return prisma.org.update({ where: { id: orgId }, data: patch })
+  const next =
+    Object.keys(patch).length === 0
+      ? org
+      : await prisma.org.update({ where: { id: orgId }, data: patch })
+  return rolloverFreeCycleIfNeeded(orgId, next)
+}
+
+/**
+ * Same gesture as the Stripe `subscription_cycle` webhook, for Free.
+ * Paid plans refill from Stripe; Free has no invoice, so authorize/org
+ * load advances `cycleEndsAt` and resets the hidden monthly grant.
+ */
+export async function rolloverFreeCycleIfNeeded(
+  orgId: string,
+  org?: Awaited<ReturnType<typeof prisma.org.findUniqueOrThrow>>,
+) {
+  const row = org ?? (await prisma.org.findUniqueOrThrow({ where: { id: orgId } }))
+  if (
+    !shouldRolloverFreeCycle(
+      row.subscriptionTierId || 'free',
+      row.cycleEndsAt,
+    )
+  ) {
+    return row
+  }
+  const tier = getTier('free')
+  return prisma.org.update({
+    where: { id: orgId },
+    data: {
+      subscriptionCreditsUsd: tier.monthlyCredits,
+      spentThisPeriodUsd: '0',
+      cycleEndsAt: defaultCycleEnd(),
+    },
+  })
 }

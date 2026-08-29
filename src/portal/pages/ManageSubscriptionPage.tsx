@@ -4,7 +4,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  formatUsdDisplay,
+  catalogTierCopy,
   type BillingStatePayload,
   type SubscriptionStatePayload,
 } from '@/lib/billing-client'
@@ -233,15 +233,14 @@ export function ManageSubscriptionPage() {
           {tiers.map((t) => {
             const isCurrent = t.isCurrent || t.tierId === (subscription?.current?.tierId ?? 'free')
             const isDowngrade = Boolean(subscription?.current) && t.tierOrder < currentOrder
+            const copy = catalogTierCopy(t)
             return (
               <li key={t.tierId}>
                 <div>
-                  <strong>
-                    {t.name} ({formatUsdDisplay(t.dollarsPerMonthDisplay)}/mês)
-                  </strong>
-                  <span className={styles.bonus}>
-                    {formatUsdDisplay(t.monthlyCredits)} créditos mensais
-                  </span>
+                  <strong>{copy.title}</strong>
+                  {copy.bonus ? (
+                    <span className={styles.bonus}>{copy.bonus}</span>
+                  ) : null}
                 </div>
                 <button
                   type="button"
