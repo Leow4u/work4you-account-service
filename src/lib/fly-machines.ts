@@ -378,7 +378,7 @@ export function agentImage(): string {
   return (
     process.env.WORK4YOU_AGENT_IMAGE ||
     // Pinned by fly-cloud-runtime deploy + NAS sync (in-place updates use this).
-    'registry.fly.io/work4you-cloud-runtime:deployment-01M1CFZ8EPF0CQQJT00CMWVP4S'
+    'registry.fly.io/work4you-cloud-runtime:deployment-01M1D3VB0G4KJS1DJR7KCJVH5H'
   )
 }
 
