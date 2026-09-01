@@ -20,7 +20,9 @@ import {
   deleteFlyApp,
   destroyMachine,
   getMachine,
+  imageFromMachine,
   imagesMatch,
+  listMachines,
   rollMachineImage,
   startMachine,
   stopMachine,
@@ -110,19 +112,35 @@ export function toAgentDto(
   }
 }
 
-/** DTO + live Fly `config.image` so the Portal can show “Atualização disponível”. */
-export async function toAgentDtoLive(row: AgentInstance): Promise<AgentDto> {
-  let runningImage: string | null = null
-  if (row.flyAppName && row.flyMachineId) {
+async function probeRunningImage(row: AgentInstance): Promise<string | null> {
+  if (!row.flyAppName) return null
+  if (row.flyMachineId) {
     try {
-      const m = await getMachine(row.flyAppName, row.flyMachineId)
-      runningImage =
-        typeof m.config?.image === 'string' ? m.config.image : null
-    } catch {
-      runningImage = null
+      const img = imageFromMachine(
+        await getMachine(row.flyAppName, row.flyMachineId),
+      )
+      if (img) return img
+    } catch (err) {
+      console.warn(
+        `fly getMachine failed app=${row.flyAppName} machine=${row.flyMachineId}`,
+        err,
+      )
     }
   }
-  return toAgentDto(row, { runningImage })
+  try {
+    const machines = await listMachines(row.flyAppName)
+    const preferred =
+      machines.find((m) => m.id === row.flyMachineId) ?? machines[0]
+    return preferred ? imageFromMachine(preferred) : null
+  } catch (err) {
+    console.warn(`fly listMachines failed app=${row.flyAppName}`, err)
+    return null
+  }
+}
+
+/** DTO + live Fly `config.image` so the Portal can show “Atualização disponível”. */
+export async function toAgentDtoLive(row: AgentInstance): Promise<AgentDto> {
+  return toAgentDto(row, { runningImage: await probeRunningImage(row) })
 }
 
 function slugify(name: string): string {
@@ -371,8 +389,7 @@ export async function startAgent(row: AgentInstance): Promise<AgentDto> {
 
   const target = agentImage()
   const machine = await getMachine(row.flyAppName, row.flyMachineId)
-  const currentImage =
-    typeof machine.config?.image === 'string' ? machine.config.image : ''
+  const currentImage = imageFromMachine(machine) || ''
   const needsImageRoll =
     !currentImage || !imagesMatch(currentImage, target)
 
@@ -428,8 +445,7 @@ export async function updateAgentImage(row: AgentInstance): Promise<AgentDto> {
   const target = agentImage()
   const machine = await getMachine(row.flyAppName, row.flyMachineId)
   const state = (machine.state || '').toLowerCase()
-  const currentImage =
-    typeof machine.config?.image === 'string' ? machine.config.image : ''
+  const currentImage = imageFromMachine(machine) || ''
   if (currentImage && imagesMatch(currentImage, target)) {
     // Already on pin — nothing to do (history untouched).
     return toAgentDto(row, { runningImage: currentImage })
@@ -524,8 +540,7 @@ export async function refreshAgentStatus(
   try {
     const m = await getMachine(row.flyAppName, row.flyMachineId)
     const state = (m.state || '').toLowerCase()
-    const runningImage =
-      typeof m.config?.image === 'string' ? m.config.image : null
+    const runningImage = imageFromMachine(m)
     let status = row.status
     let gateway = row.dashboardGatewayState
     if (state === 'started') {
@@ -559,7 +574,7 @@ export async function refreshAgentStatus(
     })
     return toAgentDto(updated, { runningImage })
   } catch {
-    return toAgentDto(row)
+    return toAgentDto(row, { runningImage: await probeRunningImage(row) })
   }
 }
 

@@ -260,6 +260,26 @@ export function CloudPage() {
     return () => clearInterval(t)
   }, [agents, load])
 
+  // Online instances do not hit the 4s pending poll. Without a refresh, a tab
+  // left open while the Portal pin moves never shows Atualizar.
+  useEffect(() => {
+    if (!authenticated || !ready) return
+    const onFocus = () => {
+      if (document.visibilityState !== 'visible') return
+      void load({ silent: true })
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    const t = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load({ silent: true })
+    }, 30_000)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+      window.clearInterval(t)
+    }
+  }, [authenticated, ready, load])
+
   useEffect(() => {
     if (!createOpen || !authenticated) return
     let cancelled = false
@@ -507,6 +527,8 @@ export function CloudPage() {
                   Atualização de runtime disponível — o histórico no disco é
                   preservado.
                 </p>
+              ) : agent.runningImage ? (
+                <p className={styles.cardMeta}>Runtime em dia.</p>
               ) : null}
               {hint ? <p className={styles.cardWarn}>{hint}</p> : null}
               {agent.errorMessage ? (

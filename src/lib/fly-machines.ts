@@ -73,6 +73,13 @@ export type FlyMachine = {
   region?: string
   instance_id?: string
   config?: FlyMachineConfig
+  /** Present on GET even when `config.image` is omitted. */
+  image_ref?: {
+    registry?: string
+    repository?: string
+    tag?: string
+    digest?: string
+  }
 }
 
 export type FlyVolume = {
@@ -90,6 +97,28 @@ export function normalizeImageRef(image: string): string {
 export function imagesMatch(a: string, b: string): boolean {
   if (!a || !b) return false
   return normalizeImageRef(a) === normalizeImageRef(b)
+}
+
+/** Best-effort image ref from a Machines API payload. */
+export function imageFromMachine(machine: FlyMachine): string | null {
+  const fromConfig = machine.config?.image
+  if (typeof fromConfig === 'string' && fromConfig.trim()) {
+    return fromConfig.trim()
+  }
+  const ref = machine.image_ref
+  if (ref?.registry && ref.repository && ref.tag) {
+    return `${ref.registry}/${ref.repository}:${ref.tag}`
+  }
+  return null
+}
+
+export async function listMachines(appName: string): Promise<FlyMachine[]> {
+  const body = await flyFetch<FlyMachine[] | { machines?: FlyMachine[] }>(
+    `/apps/${encodeURIComponent(appName)}/machines`,
+  )
+  if (Array.isArray(body)) return body
+  if (body && Array.isArray(body.machines)) return body.machines
+  return []
 }
 
 export async function createFlyApp(name: string): Promise<FlyApp> {
