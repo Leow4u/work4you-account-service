@@ -85,7 +85,7 @@ type AnnotatedModelOption = {
 
 const FALLBACK_MODELS: AnnotatedModelOption[] = [
   {
-    id: 'deepseek/deepseek-v4-flash-0731',
+    id: 'google/gemini-3.8-flash',
     name: 'Operis 4.0 Flash',
     free: false,
     locked: false,

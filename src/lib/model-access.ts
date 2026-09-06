@@ -16,12 +16,12 @@ export type AnnotatedModel = {
 }
 
 /** Billed house model on Free. Ceiling is existing NAS authorize/debit. */
-export const HOUSE_MODEL_ID = 'deepseek/deepseek-v4-flash-0731'
+export const HOUSE_MODEL_ID = 'google/gemini-3.8-flash'
 export const HOUSE_MODEL_DISPLAY = 'Operis 4.0 Flash'
 
 /** Official Work4You catalog — same as `_PROVIDER_MODELS["work4you"]`. */
 export const OFFICIAL_WORK4YOU_MODEL_IDS: readonly string[] = [
-  'deepseek/deepseek-v4-flash-0731',
+  'google/gemini-3.8-flash',
   'anthropic/claude-fable-5',
   'anthropic/claude-opus-5',
   'anthropic/claude-opus-4.8',
@@ -55,8 +55,8 @@ export const OFFICIAL_PAID_VISION_MODEL = 'google/gemini-3.7-flash'
 export const OFFICIAL_PAID_COMPACTION_MODEL = 'openai/gpt-5.4-mini'
 
 export function isHouseModel(modelId: string): boolean {
-  const id = modelId.trim().toLowerCase()
-  return id === HOUSE_MODEL_ID || id.endsWith('/deepseek-v4-flash-0731')
+  const slug = modelId.trim().toLowerCase().split('/').pop() || ''
+  return slug === 'gemini-3.8-flash' || slug === 'deepseek-v4-flash-0731'
 }
 
 export function isOfficialWork4YouModel(modelId: string): boolean {
@@ -103,14 +103,27 @@ export function annotateModels(params: {
   paidPlan: boolean
 }): AnnotatedModel[] {
   const out: AnnotatedModel[] = []
+  let sawHouse = false
   for (const m of params.models) {
     if (!m?.id) continue
     const house = isHouseModel(m.id)
+    if (house) {
+      if (sawHouse) continue
+      sawHouse = true
+      out.push({
+        id: HOUSE_MODEL_ID,
+        name: HOUSE_MODEL_DISPLAY,
+        free: false,
+        locked: !params.paidPlan,
+        pricing: m.pricing,
+      })
+      continue
+    }
     out.push({
       id: m.id,
-      name: house ? HOUSE_MODEL_DISPLAY : m.name || m.id,
+      name: m.name || m.id,
       free: false,
-      locked: !params.paidPlan && !house,
+      locked: !params.paidPlan,
       pricing: m.pricing,
     })
   }
@@ -121,7 +134,7 @@ export function annotateModels(params: {
 
 export function pickDefaultUnlocked(models: AnnotatedModel[]): string {
   const house = models.find((m) => isHouseModel(m.id) && !m.locked)
-  if (house) return house.id
+  if (house) return HOUSE_MODEL_ID
   const first = models.find((m) => !m.locked)
   return first?.id || HOUSE_MODEL_ID
 }
