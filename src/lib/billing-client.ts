@@ -111,6 +111,43 @@ export function isFreeCatalogTier(tier: {
   return (tier.tierId || '').trim().toLowerCase() === 'free'
 }
 
+function isPaidSubscriptionCurrent(
+  current?: Pick<SubscriptionCurrent, 'tierId' | 'tierName'> | null,
+): boolean {
+  if (!current?.tierId || current.tierId === 'free') return false
+  return (current.tierName || '').trim().toLowerCase() !== 'free'
+}
+
+/**
+ * Tile "current" marker. Free / no paid sub → only a Free catalog tile, even if
+ * NAS stamped `isCurrent` on Plus. Paid → matching id or the catalog flag.
+ */
+export function isCurrentCatalogTier(
+  tier: { isCurrent?: boolean; name?: string; tierId: string },
+  current?: Pick<SubscriptionCurrent, 'tierId' | 'tierName'> | null,
+): boolean {
+  if (!isPaidSubscriptionCurrent(current)) {
+    return isFreeCatalogTier(tier)
+  }
+  return Boolean(tier.isCurrent) || tier.tierId === current!.tierId
+}
+
+/**
+ * Server/API helper: stamp `isCurrent` from `current`, never from catalog leftovers.
+ * Free / `current: null` marks only Free tiles. Ready for `/api/billing/subscription`.
+ */
+export function markCatalogCurrent<T extends { name?: string; tierId: string }>(
+  tiers: T[],
+  current?: Pick<SubscriptionCurrent, 'tierId' | 'tierName'> | null,
+): Array<T & { isCurrent: boolean }> {
+  return tiers.map((tier) => ({
+    ...tier,
+    isCurrent: isPaidSubscriptionCurrent(current)
+      ? tier.tierId === current!.tierId
+      : isFreeCatalogTier(tier),
+  }))
+}
+
 /** Paid tiles keep price + included credits. Free never names the grant. */
 export function catalogTierCopy(tier: {
   tierId: string

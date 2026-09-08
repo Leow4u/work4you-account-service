@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   catalogTierCopy,
+  isCurrentCatalogTier,
   type BillingStatePayload,
   type SubscriptionStatePayload,
 } from '@/lib/billing-client'
@@ -78,9 +79,8 @@ export function ManageSubscriptionPage() {
     : '/billing'
 
   const tiers = useMemo(() => subscription?.tiers ?? [], [subscription])
-  const currentOrder = subscription?.current
-    ? tiers.find((t) => t.tierId === subscription.current!.tierId)?.tierOrder ?? 0
-    : 0
+  const currentOrder =
+    tiers.find((t) => isCurrentCatalogTier(t, subscription?.current))?.tierOrder ?? 0
 
   const startCheckout = useCallback(
     async (tierId: string) => {
@@ -173,7 +173,7 @@ export function ManageSubscriptionPage() {
   useEffect(() => {
     if (!planParam || loading || !subscription || autoStarted.current) return
     const match = tiers.find((t) => t.tierId === planParam)
-    if (!match || match.isCurrent) return
+    if (!match || isCurrentCatalogTier(match, subscription.current)) return
     if (match.tierOrder <= currentOrder && subscription.current) return
     autoStarted.current = true
     void startUpgrade(planParam)
@@ -231,7 +231,7 @@ export function ManageSubscriptionPage() {
         </p>
         <ul className={styles.tierList}>
           {tiers.map((t) => {
-            const isCurrent = t.isCurrent || t.tierId === (subscription?.current?.tierId ?? 'free')
+            const isCurrent = isCurrentCatalogTier(t, subscription?.current)
             const isDowngrade = Boolean(subscription?.current) && t.tierOrder < currentOrder
             const copy = catalogTierCopy(t)
             return (

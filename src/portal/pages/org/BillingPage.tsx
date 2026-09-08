@@ -9,6 +9,7 @@ import {
   formatCycleDate,
   formatUsdDisplay,
   freeAllowanceUsedUp,
+  isCurrentCatalogTier,
   isFreePlanPayload,
   type BillingStatePayload,
   type SubscriptionStatePayload,
@@ -308,6 +309,10 @@ export function BillingPage() {
   }
 
   const isFree = isFreePlanPayload(billing, subscription)
+  const manageCurrentOrder =
+    subscription?.tiers?.find((x) =>
+      isCurrentCatalogTier(x, subscription.current),
+    )?.tierOrder ?? 0
   const lowBalance = useMemo(() => {
     if (!billing || isFreePlanPayload(billing, subscription)) return false
     return Number(billing.balanceUsd) < 5
@@ -480,8 +485,9 @@ export function BillingPage() {
                   <>
                     <p className={styles.rowMeta}>
                       {formatUsdDisplay(
-                        subscription?.tiers.find((t) => t.isCurrent)
-                          ?.dollarsPerMonthDisplay || '0',
+                        subscription?.tiers?.find((t) =>
+                          isCurrentCatalogTier(t, subscription.current),
+                        )?.dollarsPerMonthDisplay || '0',
                       )}
                       /mês ·{' '}
                       {formatUsdDisplay(
@@ -604,10 +610,9 @@ export function BillingPage() {
             </p>
             <ul className={styles.tierList}>
               {subscription.tiers.map((t) => {
-                const currentOrder =
-                  subscription.tiers.find((x) => x.isCurrent)?.tierOrder ?? 0
+                const isCurrent = isCurrentCatalogTier(t, subscription.current)
                 const isDowngrade =
-                  Boolean(subscription.current) && t.tierOrder < currentOrder
+                  Boolean(subscription.current) && t.tierOrder < manageCurrentOrder
                 const copy = catalogTierCopy(t)
                 return (
                   <li key={t.tierId}>
@@ -621,7 +626,7 @@ export function BillingPage() {
                       type="button"
                       className={styles.primary}
                       disabled={
-                        t.isCurrent ||
+                        isCurrent ||
                         Boolean(busy) ||
                         !billing?.canChangePlan
                       }
@@ -635,7 +640,7 @@ export function BillingPage() {
                     >
                       {busy === `upgrade:${t.tierId}` || busy === `down:${t.tierId}`
                         ? '…'
-                        : t.isCurrent
+                        : isCurrent
                           ? 'Atual'
                           : isDowngrade
                             ? 'Agendar'
